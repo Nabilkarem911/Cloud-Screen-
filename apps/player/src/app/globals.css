@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+  --eclipse-bg: #030712;
+  --eclipse-cyan: #00d4ff;
+  --eclipse-magenta: #ff00aa;
+  --background: #030712;
+  --foreground: #f4f4f5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--eclipse-bg);
+  color: var(--foreground);
+}
+
+.eclipse-marquee {
+  animation: eclipse-marquee 40s linear infinite;
+}
+
+@keyframes eclipse-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

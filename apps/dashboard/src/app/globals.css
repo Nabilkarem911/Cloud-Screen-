@@ -1,0 +1,473 @@
+@import 'tailwindcss';
+
+/* —— Crystal · Orange & Navy —— */
+:root {
+  /* Navy scale (structure) */
+  --vc-navy: 222 47% 22%;
+  --vc-navy-mid: 222 40% 32%;
+  --vc-navy-soft: 220 25% 96%;
+  /* Accent orange #FF6B00 */
+  --vc-orange: 24 100% 50%;
+  --vc-orange-deep: 18 100% 40%;
+  --vc-orange-soft: 28 100% 96%;
+  --background: 220 22% 97%;
+  --foreground: 222 47% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 12%;
+  --muted: 220 16% 94%;
+  --muted-foreground: 220 18% 32%;
+  --border: 220 18% 88%;
+  --ring: 24 100% 50%;
+  --primary: 24 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 24 100% 50%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --vc-shadow: 222 40% 45%;
+}
+
+.dark {
+  --vc-navy: 222 47% 62%;
+  --vc-navy-mid: 222 38% 48%;
+  --vc-navy-soft: 222 35% 14%;
+  --vc-orange: 24 100% 50%;
+  --vc-orange-deep: 18 100% 44%;
+  --vc-orange-soft: 24 35% 14%;
+  --background: 222 47% 8%;
+  --foreground: 220 25% 96%;
+  --card: 222 45% 11%;
+  --card-foreground: 220 20% 96%;
+  --muted: 222 32% 16%;
+  --muted-foreground: 220 12% 72%;
+  --border: 222 25% 18%;
+  --ring: 24 100% 50%;
+  --primary: 24 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 24 100% 50%;
+  --accent-foreground: 0 0% 100%;
+  --vc-shadow: 222 50% 6%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-ring: hsl(var(--ring));
+  --color-vc-purple: hsl(var(--vc-navy));
+  --color-vc-purple-mid: hsl(var(--vc-navy-mid));
+  --color-vc-accent: hsl(var(--vc-orange));
+  /* Digital Sovereignty — brand tokens */
+  --color-brand-orange: #ff6b00;
+  /* Identity navy (logo) */
+  --color-brand-navy: #1b254b;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-feature-settings:
+    'kern' 1,
+    'liga' 1;
+  letter-spacing: -0.011em;
+  line-height: 1.5;
+}
+
+/* Light — white-frost canvas + soft orange bloom (orbs above) */
+html:not(.dark) body {
+  background:
+    radial-gradient(ellipse 80% 55% at 100% 0%, rgb(255 107 0 / 0.08), transparent 55%),
+    linear-gradient(165deg, #f8fafc 0%, #eef2f7 45%, #f1f5f9 100%) fixed;
+  background-attachment: fixed;
+}
+
+/* Scrollbars — thin orange (dark) / slate (light); .vc-scrollbar for explicit regions */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 107 0 / 0.38) transparent;
+}
+
+/* App shell: reserve gutter on scroll regions to reduce layout shift when scrollbar appears */
+.vc-scrollbar {
+  scrollbar-gutter: stable;
+}
+
+html:not(.dark) * {
+  scrollbar-color: rgb(15 23 42 / 0.14) transparent;
+}
+
+.dark ::-webkit-scrollbar,
+.vc-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+.vc-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgb(255 107 0 / 0.45), rgb(255 107 0 / 0.22));
+  border-radius: 999px;
+}
+
+.dark ::-webkit-scrollbar-track,
+.vc-scrollbar::-webkit-scrollbar-track {
+  background: rgb(255 255 255 / 0.03);
+  border-radius: 999px;
+}
+
+html:not(.dark) ::-webkit-scrollbar,
+html:not(.dark) .vc-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb,
+html:not(.dark) .vc-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(15 23 42 / 0.18);
+  border-radius: 999px;
+}
+
+/* Geist Mono — metrics, IDs, clocks */
+.font-mono-nums,
+.tabular-nums {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Arabic: IBM Plex Sans Arabic */
+.font-ar,
+[lang='ar'] {
+  font-family: var(--font-sans-ar), 'Segoe UI', Tahoma, sans-serif;
+  letter-spacing: 0;
+  line-height: 1.65;
+}
+
+/* Page chrome */
+.vc-page-title {
+  font-size: clamp(1.75rem, 2.5vw, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: hsl(var(--foreground));
+}
+
+.vc-page-kicker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .vc-page-kicker {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.vc-page-desc {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Stat / metric tiles — internal orange glow (top-right) */
+.vc-stat-card-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse 75% 60% at 100% 0%, rgb(255 107 0 / 0.16), transparent 58%);
+  pointer-events: none;
+}
+
+.vc-stat-card-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Cards — high-refractive glass: 40px blur + 5% orange top wash */
+.vc-card-surface {
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgb(255 107 0 / 0.05) 0%, transparent 42%),
+    linear-gradient(165deg, rgb(255 255 255 / 0.88) 0%, rgb(255 255 255 / 0.42) 48%, rgb(255 255 255 / 0.22) 100%);
+  backdrop-filter: blur(40px) saturate(1.2);
+  -webkit-backdrop-filter: blur(40px) saturate(1.2);
+  border: 1px solid rgb(0 0 0 / 0.06);
+  box-shadow:
+    0 1px 2px rgb(255 107 0 / 0.05),
+    0 16px 48px -16px rgb(255 107 0 / 0.05);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.vc-card-surface:hover {
+  border-color: rgb(255 107 0 / 0.12);
+}
+
+.dark .vc-card-surface {
+  border-color: rgb(255 255 255 / 0.1);
+  /* Identity navy #1B254B — secondary glass cards */
+  background:
+    linear-gradient(180deg, rgb(255 107 0 / 0.05) 0%, transparent 38%),
+    linear-gradient(165deg, rgb(27 37 75 / 0.72) 0%, rgb(10 15 29 / 0.55) 100%);
+  backdrop-filter: blur(40px) saturate(1.2);
+  -webkit-backdrop-filter: blur(40px) saturate(1.2);
+  box-shadow:
+    0 8px 40px -12px rgb(255 107 0 / 0.05),
+    0 0 48px -24px rgb(255 107 0 / 0.05),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dark .vc-card-surface:hover {
+  border-color: rgb(255 107 0 / 0.18);
+  box-shadow:
+    0 12px 48px -12px rgb(255 107 0 / 0.06),
+    0 0 56px -20px rgb(255 107 0 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+/* In-card icon wells — orange icon on frosted circle */
+.vc-icon-glass-circle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+html:not(.dark) .vc-icon-glass-circle {
+  background: rgb(255 255 255 / 0.65);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 4px 16px -6px rgb(255 107 0 / 0.08);
+}
+
+/* Primary — solid #FF6B00, subtle gloss (no heavy neon) */
+.vc-btn-primary {
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-top-color: rgb(255 255 255 / 0.38);
+  background: linear-gradient(180deg, #ff7a1a 0%, #ff6b00 48%, #e85f00 100%);
+  color: #fff;
+  box-shadow:
+    0 4px 18px -4px rgba(255, 107, 0, 0.25),
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 0 rgb(0 0 0 / 0.1);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.vc-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 24px -6px rgba(255, 107, 0, 0.35),
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    inset 0 -1px 0 rgb(0 0 0 / 0.08);
+}
+
+.vc-btn-primary:active {
+  transform: translateY(0);
+}
+
+/* CTA — same family (alias .vc-btn-accent) */
+.vc-btn-cta,
+.vc-btn-accent {
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-top-color: rgb(255 255 255 / 0.35);
+  background: linear-gradient(180deg, #ff7a1a 0%, #ff6b00 100%);
+  color: #fff;
+  box-shadow:
+    0 4px 18px -4px rgba(255, 107, 0, 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    inset 0 -1px 0 rgb(0 0 0 / 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vc-btn-cta:hover,
+.vc-btn-accent:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 22px -6px rgba(255, 107, 0, 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+/* Table rows — minimal */
+.vc-table-row {
+  transition: background 0.15s ease;
+  border-color: rgb(0 0 0 / 0.06);
+}
+
+.dark .vc-table-row {
+  border-color: rgb(255 255 255 / 0.06);
+}
+
+.vc-table-row:hover {
+  background: hsl(var(--muted) / 0.35);
+}
+
+.dark .vc-table-row:hover {
+  background: rgb(255 255 255 / 0.03);
+}
+
+/* Aurora — #FF6B00 @ 20% core, 600px blur (glowing atmosphere) */
+.vc-aurora {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.vc-aurora-orb {
+  position: absolute;
+  width: min(720px, 95vw);
+  height: min(720px, 95vw);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgb(255 107 0 / 0.26) 0%, transparent 62%);
+  filter: blur(600px);
+  opacity: 1;
+  will-change: transform;
+}
+
+.vc-aurora-orb-a {
+  top: -22%;
+  inset-inline-start: -18%;
+}
+
+.vc-aurora-orb-b {
+  width: min(640px, 90vw);
+  height: min(640px, 90vw);
+  bottom: -28%;
+  inset-inline-end: -15%;
+}
+
+.vc-aurora-orb-c {
+  width: min(680px, 92vw);
+  height: min(680px, 92vw);
+  top: 28%;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+}
+
+[dir='rtl'] .vc-aurora-orb-a {
+  inset-inline-start: auto;
+  inset-inline-end: -18%;
+}
+
+[dir='rtl'] .vc-aurora-orb-b {
+  inset-inline-end: auto;
+  inset-inline-start: -15%;
+}
+
+html:not(.dark) .vc-aurora-orb {
+  background: radial-gradient(circle at 50% 50%, rgb(255 107 0 / 0.18) 0%, transparent 62%);
+  filter: blur(480px);
+}
+
+/* Dark canvas — super dark navy (#0A0F1D) behind shell + cards */
+html.dark body {
+  background-color: #0a0f1d;
+  /* Very light top bloom (orange) — reads on darker base */
+  background-image: radial-gradient(ellipse 120% 70% at 50% -15%, rgb(255 107 0 / 0.03), transparent 52%);
+  background-attachment: fixed;
+}
+
+/* Strong glass — 40px blur */
+.vc-glass {
+  background: hsl(var(--card) / 0.72);
+  backdrop-filter: blur(40px) saturate(1.15);
+  -webkit-backdrop-filter: blur(40px) saturate(1.15);
+}
+
+.dark .vc-glass {
+  background: rgb(27 37 75 / 0.48);
+}
+
+/* Table headers — identity navy bar + orange labels */
+.vc-table-head-surface {
+  background: rgb(27 37 75 / 0.94);
+  box-shadow: inset 0 -1px 0 rgb(255 107 0 / 0.06);
+}
+
+html:not(.dark) .vc-table-head-surface {
+  background: rgb(241 245 249 / 0.95);
+  box-shadow: inset 0 -1px 0 rgb(255 107 0 / 0.08);
+}
+
+/* Primary hover: transition via .vc-btn-primary:hover — no pulse animation */
+
+.ngl-logo-mark {
+  text-shadow:
+    0 0 10px rgba(255, 107, 0, 0.55),
+    0 0 22px rgba(27, 37, 75, 0.55);
+  filter: drop-shadow(0 0 6px rgba(255, 107, 0, 0.45));
+}
+
+.ngl-screen-card-live {
+  box-shadow:
+    0 0 0 1px rgba(255, 107, 0, 0.18),
+    0 8px 40px -12px rgba(255, 107, 0, 0.08),
+    0 12px 36px -12px rgba(255, 107, 0, 0.05);
+}
+
+.ngl-media-tile {
+  border: 1px solid rgb(0 0 0 / 0.06);
+  background: linear-gradient(
+    180deg,
+    rgb(255 107 0 / 0.05) 0%,
+    transparent 40%
+  ),
+    linear-gradient(145deg, rgb(255 255 255 / 0.82) 0%, rgb(255 255 255 / 0.5) 100%);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    0 8px 24px -8px rgba(255, 107, 0, 0.06);
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.dark .ngl-media-tile {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    180deg,
+    rgb(255 107 0 / 0.05) 0%,
+    transparent 40%
+  ),
+    linear-gradient(145deg, rgb(27 37 75 / 0.58) 0%, rgb(10 15 29 / 0.32) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 28px -8px rgba(255, 107, 0, 0.05);
+}
+
+.ngl-media-tile:hover {
+  border-color: rgba(255, 107, 0, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 36px -8px rgba(255, 107, 0, 0.08),
+    0 12px 32px -10px rgba(255, 107, 0, 0.05);
+}
+
+.ngl-media-icon-accent {
+  color: #ff6b00;
+}

@@ -1,0 +1,20 @@
+node_modules/
+uploads/
+.env
+apps/backend/.env
+apps/dashboard/.env.local
+apps/player/.env.local
+
+# Build & caches (keeps repo and IDE fast; run `npm run clean` to delete locally)
+apps/dashboard/.next/
+apps/backend/dist/
+apps/player/.next/
+.turbo/
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db

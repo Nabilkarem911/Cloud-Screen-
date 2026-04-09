@@ -1,0 +1,531 @@
+generator client {
+
+  provider = "prisma-client-js"
+
+}
+
+
+
+datasource db {
+
+  provider = "postgresql"
+
+  url      = env("DATABASE_URL")
+
+}
+
+
+
+enum UserRole {
+
+  OWNER
+
+  ADMIN
+
+  EDITOR
+
+  VIEWER
+
+}
+
+
+
+/// Internal Cloud Signage employees (governance). Null = customer / tenant user only.
+enum PlatformStaffRole {
+
+  SUPER_ADMIN
+
+  SUPPORT_SPECIALIST
+
+  BILLING_MANAGER
+
+}
+
+
+
+enum ScreenStatus {
+
+  ONLINE
+
+  OFFLINE
+
+  MAINTENANCE
+
+}
+
+
+
+enum CanvasType {
+
+  IMAGE
+
+  VIDEO
+
+  URL
+
+  WIDGET
+
+}
+
+
+
+enum SubscriptionPlan {
+
+  FREE
+
+  STARTER
+
+  PRO
+
+  ENTERPRISE
+
+}
+
+
+
+enum SubscriptionStatus {
+
+  TRIALING
+
+  ACTIVE
+
+  PAST_DUE
+
+  CANCELED
+
+}
+
+/// Per-customer (tenant user) subscription tier for admin CRM — distinct from workspace Subscription.
+enum UserSubscriptionStatus {
+
+  ACTIVE
+
+  EXPIRED
+
+  TRIAL
+
+}
+
+
+
+model User {
+
+  id               String            @id @default(cuid())
+
+  email            String            @unique
+
+  fullName         String
+
+  passwordHash     String
+
+  refreshTokenHash String?
+
+  locale           String            @default("en")
+
+  isActive         Boolean           @default(true)
+
+  /// Platform super-admin: sees all workspaces; role checks bypass.
+  isSuperAdmin     Boolean           @default(false)
+
+  /// Internal staff role (Support / Billing). Super Admin may also set SUPER_ADMIN for parity with UI.
+  platformStaffRole PlatformStaffRole?
+
+  /// Customer subscription tier (admin CRM). EXPIRED may also be implied when subscriptionEndDate is past.
+  subscriptionStatus UserSubscriptionStatus @default(TRIAL)
+
+  /// When the customer-level subscription ends (UTC). Null = not set / open-ended trial.
+  subscriptionEndDate DateTime?
+
+  /// Last successful password login (UTC). Updated on login and register.
+  lastLoginAt      DateTime?
+
+  businessName     String?
+
+  phone            String?
+
+  /// ISO 3166-1 alpha-2 (e.g. US, AE)
+  country          String?
+
+  city             String?
+
+  emailVerified    Boolean           @default(false)
+
+  /// Email / registration OTP (cleared after verify). Short-lived.
+  verificationCode String?
+
+  verificationCodeExpiresAt DateTime?
+
+  passwordResetToken String?
+
+  passwordResetExpiresAt DateTime?
+
+  pendingEmail     String?
+
+  pendingEmailOtp  String?
+
+  pendingEmailOtpExpiresAt DateTime?
+
+  createdAt        DateTime          @default(now())
+
+  updatedAt        DateTime          @updatedAt
+
+  memberships      WorkspaceMember[]
+
+  createdCanvases  Canvas[]          @relation("CanvasCreatedBy")
+
+  payments         PaymentRecord[]
+
+}
+
+
+
+model PaymentRecord {
+
+  id           String   @id @default(cuid())
+
+  userId       String
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amountCents  Int
+
+  currency     String   @default("USD")
+
+  status       String
+
+  description  String?
+
+  invoiceRef   String?
+
+  paidAt       DateTime?
+
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+
+}
+
+
+
+model Workspace {
+
+  id            String            @id @default(cuid())
+
+  name          String
+
+  slug          String            @unique
+
+  defaultLocale String            @default("en")
+
+  timezone      String            @default("UTC")
+
+  createdAt     DateTime          @default(now())
+
+  updatedAt     DateTime          @updatedAt
+
+  members       WorkspaceMember[]
+
+  screens       Screen[]
+
+  canvases      Canvas[]
+
+  medias        Media[]
+
+  playlists     Playlist[]
+
+  schedules     Schedule[]
+
+  subscription  Subscription?
+
+}
+
+
+
+model WorkspaceMember {
+
+  id          String    @id @default(cuid())
+
+  workspaceId String
+
+  userId      String
+
+  role        UserRole  @default(VIEWER)
+
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+
+
+  @@unique([workspaceId, userId])
+
+}
+
+
+
+model Screen {
+
+  id               String       @id @default(cuid())
+
+  workspaceId      String
+
+  name             String
+
+  serialNumber     String       @unique
+
+  status           ScreenStatus @default(OFFLINE)
+
+  location         String?
+
+  lastSeenAt       DateTime?
+
+  activePlaylistId String?
+
+  /// Bottom marquee / ticker text pushed to the player HUD
+
+  playerTicker     String?
+
+  createdAt        DateTime     @default(now())
+
+  updatedAt        DateTime     @updatedAt
+
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// Organizational bucket: screens belong to this playlist for branch UI (not necessarily active playback).
+  playlistGroupId  String?
+
+  playlistGroup    Playlist?    @relation("PlaylistGroupForScreen", fields: [playlistGroupId], references: [id], onDelete: SetNull)
+
+  activePlaylist   Playlist?    @relation("ActivePlaylistForScreen", fields: [activePlaylistId], references: [id], onDelete: SetNull)
+
+  /// One-click override: force this playlist until overrideExpiresAt
+  overridePlaylistId String?
+  overrideExpiresAt  DateTime?
+  overridePlaylist   Playlist?    @relation("ScreenOverridePlaylist", fields: [overridePlaylistId], references: [id], onDelete: SetNull)
+
+  schedules Schedule[]
+
+  @@index([workspaceId, playlistGroupId])
+
+}
+
+
+
+/// Creative Studio design: vector layout + optional legacy URL fields
+
+model Canvas {
+
+  id            String         @id @default(cuid())
+
+  workspaceId   String
+
+  createdById   String
+
+  name          String
+
+  type          CanvasType     @default(WIDGET)
+
+  durationSec   Int            @default(15)
+
+  /// Legacy / external URL (optional)
+
+  contentUrl    String?
+
+  /// Konva-exported scene graph (objects, version)
+
+  layoutData    Json           @default("{}")
+
+  width         Int            @default(1920)
+
+  height        Int            @default(1080)
+
+  metadata      Json?
+
+  createdAt     DateTime       @default(now())
+
+  updatedAt     DateTime       @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdBy     User           @relation("CanvasCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  playlistItems PlaylistItem[]
+
+}
+
+
+
+model Media {
+
+  id            String         @id @default(cuid())
+
+  workspaceId   String
+
+  fileName      String
+
+  originalName  String
+
+  mimeType      String
+
+  sizeBytes     Int
+
+  relativePath  String
+
+  createdAt     DateTime       @default(now())
+
+  updatedAt     DateTime       @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  playlistItems PlaylistItem[]
+
+
+
+  @@index([workspaceId, createdAt])
+
+}
+
+
+
+model Playlist {
+
+  id              String         @id @default(cuid())
+
+  workspaceId     String
+
+  name            String
+
+  isPublished     Boolean        @default(false)
+
+  createdAt       DateTime       @default(now())
+
+  updatedAt       DateTime       @updatedAt
+
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  items           PlaylistItem[]
+
+  assignedScreens Screen[]       @relation("ActivePlaylistForScreen")
+
+  overrideScreens Screen[]       @relation("ScreenOverridePlaylist")
+
+  screensInGroup  Screen[]       @relation("PlaylistGroupForScreen")
+
+  schedules       Schedule[]
+
+}
+
+
+
+model PlaylistItem {
+
+  id          String   @id @default(cuid())
+
+  playlistId  String
+
+  /// Exactly one of mediaId or canvasId must be set (enforced in app + DB check)
+
+  mediaId     String?
+
+  canvasId    String?
+
+  orderIndex  Int
+
+  durationSec Int      @default(10)
+
+  createdAt   DateTime @default(now())
+
+  playlist    Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  media       Media?   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  canvas      Canvas?  @relation(fields: [canvasId], references: [id], onDelete: Restrict)
+
+
+
+  @@unique([playlistId, orderIndex])
+
+  @@index([mediaId])
+
+  @@index([canvasId])
+
+}
+
+
+
+/// When content should play: days 0-6 (Sun-Sat), HH:mm times in workspace TZ
+model Schedule {
+
+  id          String   @id @default(cuid())
+
+  workspaceId String
+
+  /// null = all screens in workspace; set = single screen
+  screenId    String?
+
+  playlistId  String
+
+  daysOfWeek  Int[]
+
+  startTime   String
+
+  endTime     String
+
+  startDate   DateTime?
+
+  endDate     DateTime?
+
+  priority    Int      @default(0)
+
+  enabled     Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  screen    Screen?   @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  playlist  Playlist  @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+
+  @@index([screenId])
+
+  @@index([playlistId])
+
+}
+
+
+
+model Subscription {
+
+  id               String             @id @default(cuid())
+
+  workspaceId      String             @unique
+
+  plan             SubscriptionPlan   @default(FREE)
+
+  status           SubscriptionStatus @default(TRIALING)
+
+  seats            Int                @default(1)
+
+  screenLimit      Int                @default(1)
+
+  startedAt        DateTime           @default(now())
+
+  currentPeriodEnd DateTime?
+
+  canceledAt       DateTime?
+
+  createdAt        DateTime           @default(now())
+
+  updatedAt        DateTime           @updatedAt
+
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+}
+

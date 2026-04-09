@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Canvas" ALTER COLUMN "type" SET DEFAULT 'WIDGET',
+ALTER COLUMN "durationSec" SET DEFAULT 15;

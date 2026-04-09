@@ -1,0 +1,1 @@
+-- sync_login_fix: no schema delta; documents deploy step for login recovery after user seed refresh.

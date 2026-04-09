@@ -1,0 +1,35 @@
+{
+  "name": "cloud-signage",
+  "version": "1.0.0",
+  "description": "Enterprise AI-powered cloud signage monorepo",
+  "scripts": {
+    "env:sync": "node scripts/sync-env.cjs",
+    "clean": "node scripts/clean-build.cjs",
+    "i18n:key-parity": "node scripts/i18n-key-parity.cjs",
+    "i18n:hardcoded-scan": "node scripts/i18n-hardcoded-scan.cjs",
+    "i18n:missing-marker-scan": "node scripts/i18n-missing-marker-scan.cjs",
+    "i18n:check": "npm run i18n:key-parity && npm run i18n:hardcoded-scan && npm run i18n:missing-marker-scan",
+    "dev": "npm run env:sync && concurrently -n dashboard,backend,player -c cyan,green,magenta -m 3 \"npm run dev -w apps/dashboard\" \"npm run start:dev -w apps/backend\" \"npm run dev -w apps/player\"",
+    "build": "npm run build -w apps/dashboard && npm run build -w apps/backend && npm run build -w apps/player",
+    "lint": "npm run lint -w apps/dashboard && npm run lint -w apps/backend && npm run lint -w apps/player",
+    "format": "prettier --write ."
+  },
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "concurrently": "^9.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.8.1",
+    "tsx": "^4.21.0"
+  },
+  "dependencies": {
+    "cookie": "^1.1.1"
+  }
+}
