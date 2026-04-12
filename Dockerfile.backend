@@ -9,19 +9,15 @@ WORKDIR /app
 
 RUN npm install -g prisma@latest
 
-# All manifests at repo root before install (monorepo workspaces)
+RUN prisma --version
+
 COPY package*.json ./
 COPY packages ./packages
 COPY apps/backend/package*.json ./apps/backend/
-COPY apps/dashboard/package.json apps/dashboard/
-COPY apps/player/package.json apps/player/
-COPY apps/marketing/package.json apps/marketing/
 
 RUN npm install
 
 COPY apps/backend ./apps/backend
-
-RUN npm install
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
