@@ -9,10 +9,10 @@ WORKDIR /app
 
 RUN npm install -g prisma@latest
 
+# All manifests at repo root before install (monorepo workspaces)
 COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
 COPY packages ./packages
-
+COPY apps/backend/package*.json ./apps/backend/
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/player/package.json apps/player/
 COPY apps/marketing/package.json apps/marketing/
@@ -25,14 +25,9 @@ RUN npm install
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-# Debug hoisting (Railway build logs): workspace bin layout before prisma generate
-RUN ls -R node_modules/.bin
-RUN ls -R apps/backend/node_modules/.bin || true
+RUN prisma generate --schema=apps/backend/prisma/schema.prisma
 
-RUN echo "=== Prisma generate + Nest build starting ===" \
-  && (./node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma \
-      || ./apps/backend/node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma) \
-  && npm run build --workspace=backend
+RUN npm run build --workspace=backend
 
 FROM node:20-alpine
 WORKDIR /app
@@ -45,7 +40,7 @@ COPY --from=builder /app ./
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 RUN npm install -g prisma@latest \
-  && npx prisma generate --schema=apps/backend/prisma/schema.prisma
+  && prisma generate --schema=apps/backend/prisma/schema.prisma
 
 EXPOSE 4000
 
