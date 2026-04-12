@@ -4,35 +4,35 @@
 #   docker build -f Dockerfile.backend .
 # docker-compose.yml uses context: . for this service.
 #
-FROM node:20-alpine AS builder
+FROM node:20 AS builder
 WORKDIR /app
 
-RUN npm install -g prisma@latest
+# Install prisma globally first
+RUN npm install -g prisma
 
-RUN apk add --no-cache openssl libc6-compat
+# Copy manifest files
+COPY package*.json ./
+COPY apps/backend/package*.json ./apps/backend/
+COPY packages ./packages
 
-# Root lockfile + shared packages
-COPY package.json package-lock.json ./
-COPY packages ./packages/
-
-# All workspace manifests (required so root `npm ci` can resolve apps/* workspaces)
-COPY apps/backend/package.json apps/backend/
+# Required for root workspaces ("apps/*") — npm install expects these manifests to exist
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/player/package.json apps/player/
 COPY apps/marketing/package.json apps/marketing/
 
-# Full install for workspaces (Prisma CLI is a devDependency — do not use --omit=dev on npm ci).
-ENV NODE_ENV=development
-RUN npm ci
+# Install all dependencies
+RUN npm install
 
-# Backend source and Prisma schema
+# Copy source code
 COPY apps/backend ./apps/backend
 
-# Prisma Client (fixes missing generated types in Nest build)
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma \
-  && npm run build --workspace=backend
+# Run generate using the local binary path (avoids shell / npx resolution issues)
+RUN ./node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma
+
+# Build
+RUN npm run build --workspace=backend
 
 RUN npm prune --omit=dev
 
@@ -45,11 +45,15 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app ./
 
+# Builder is glibc; Alpine is musl — regenerate Prisma engines for this image.
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
+RUN npm install -g prisma \
+  && npx prisma generate --schema=apps/backend/prisma/schema.prisma
+
 EXPOSE 4000
 
 # Backend listens on 0.0.0.0 and PORT (see apps/backend/src/main.ts). Railway sets PORT at runtime.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
   CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# migrate deploy needs DATABASE_URL at runtime; Prisma Client comes from builder `prisma generate` above.
 CMD ["sh", "-c", "npx --yes prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
