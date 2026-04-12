@@ -9,6 +9,12 @@ import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
+  if (process.env.DATABASE_URL?.trim()) {
+    console.log('Database connection attempt...');
+  } else {
+    console.warn('DATABASE_URL is not set; Prisma/database features will fail.');
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });

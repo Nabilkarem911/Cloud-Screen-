@@ -46,4 +46,5 @@ EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
   CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["npm", "run", "start:prod", "--workspace=backend"]
+# migrate deploy needs DATABASE_URL at runtime; Prisma Client comes from builder `prisma generate` above.
+CMD ["sh", "-c", "npx --yes prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
