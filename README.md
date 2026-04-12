@@ -39,6 +39,14 @@ API base URL defaults to `http://localhost:4000/api/v1`; dashboard reads `NEXT_P
 - **Stripe:** Checkout, webhooks, Customer Portal — price IDs and `STRIPE_WEBHOOK_SECRET` in `.env.example`
 - **Sentry:** `SENTRY_DSN` (backend), `NEXT_PUBLIC_SENTRY_DSN` or `SENTRY_DSN` (dashboard) when wired in config
 
+## Docker / Railway (backend API)
+
+- **Build context** must be the **monorepo root** (same as `docker compose`), not `apps/backend`:
+  - `docker build -f Dockerfile.backend .`
+- On **Railway**, set the service **Root Directory** to the repo root (or leave default if the whole repo is the service), and point the Dockerfile to `Dockerfile.backend`.
+- The image runs `npm ci` at the root, then `npm run prisma:generate -w apps/backend` (requires `DATABASE_URL` only for schema resolution; a dummy URL is set in the Dockerfile build stage) before `npm run build -w apps/backend`.
+- Internal workspace packages live under `packages/` (`packages/*` in `package.json`); add libraries there and reference them from apps with your npm workspace protocol so `npm ci` links them during the build.
+
 ## GitHub: sync & CI
 
 - **Day to day:** `git pull --rebase origin main` before you start, then after changes: `git status` → `git add` / `git commit` → `git push origin main`.
