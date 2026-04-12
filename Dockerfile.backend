@@ -2,22 +2,18 @@
 #
 # Railway / Docker: build context MUST be the monorepo root (repository root), e.g.
 #   docker build -f Dockerfile.backend .
-# Do not set context to apps/backend — npm workspaces and Prisma paths depend on /repo.
+# docker-compose.yml uses context: . for this service.
 #
-# Internal workspaces (@cloudsignage/* or packages/*): keep package.json under packages/
-# and apps/* in sync with root package-lock.json; npm ci links them from the root.
-FROM node:20-bookworm-slim AS build
-WORKDIR /repo
+FROM node:20-alpine AS builder
+WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache openssl libc6-compat
 
-# 1) Root lockfile + shared packages (workspace members under packages/*)
+# Root lockfile + shared packages
 COPY package.json package-lock.json ./
 COPY packages ./packages/
 
-# 2) All workspace package manifests so `npm ci` can link apps/* and packages/*
+# All workspace manifests (required so root `npm ci` can resolve apps/* workspaces)
 COPY apps/backend/package.json apps/backend/
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/player/package.json apps/player/
@@ -25,33 +21,29 @@ COPY apps/marketing/package.json apps/marketing/
 
 RUN npm ci
 
-# 3) Backend source (Nest + Prisma). Add more COPY lines here if backend imports TS from sibling workspaces.
+# Backend source and Prisma schema
 COPY apps/backend ./apps/backend
 
-# Prisma needs a URL at generate time (no real DB required for `generate`)
+# Prisma Client (fixes missing generated types in Nest build)
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-RUN npm run prisma:generate -w apps/backend \
-  && npm run build -w apps/backend \
+RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma \
+  && npm run build --workspace=backend \
   && npm prune --omit=dev
 
-FROM node:20-bookworm-slim AS runner
-WORKDIR /repo
+FROM node:20-alpine
+WORKDIR /app
+
+RUN apk add --no-cache openssl libc6-compat
+
 ENV NODE_ENV=production
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app ./
 
-COPY --from=build /repo/package.json /repo/package-lock.json ./
-COPY --from=build /repo/node_modules ./node_modules
-COPY --from=build /repo/apps/backend ./apps/backend
-COPY --from=build /repo/packages ./packages
-
-WORKDIR /repo/apps/backend
 EXPOSE 4000
 
+# Backend listens on 0.0.0.0 and PORT (see apps/backend/src/main.ts). Railway sets PORT at runtime.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
-  CMD node -e "require('http').get('http://127.0.0.1:4000/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+  CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy --schema=./prisma/schema.prisma && exec node dist/src/main.js"]
+CMD ["npm", "run", "start:prod", "--workspace=backend"]

@@ -25,6 +25,7 @@ services:
 
   backend:
     build:
+      # Monorepo root: required for npm workspaces + Prisma paths (do not use apps/backend as context).
       context: .
       dockerfile: Dockerfile.backend
     restart: unless-stopped
