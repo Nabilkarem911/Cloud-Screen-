@@ -40,7 +40,7 @@ export class MediaService {
   getPublicBaseUrl(): string {
     return (
       this.config.get<string>('MEDIA_PUBLIC_BASE_URL') ??
-      `http://localhost:${this.config.get<string>('PORT', '4000')}`
+      `http://localhost:${this.config.get<string>('PORT', '3000')}`
     );
   }
 

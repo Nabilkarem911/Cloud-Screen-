@@ -38,9 +38,9 @@ ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 RUN npm install -g prisma@latest \
   && prisma generate --config apps/backend/prisma.config.ts
 
-EXPOSE 4000
+EXPOSE 3000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
-  CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+  CMD node -e "const p=Number(process.env.PORT||3000);require('http').get('http://127.0.0.1:'+p+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["sh", "-c", "prisma migrate deploy --config apps/backend/prisma.config.ts && npm run start:prod --workspace=backend"]

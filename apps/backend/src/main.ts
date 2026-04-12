@@ -19,6 +19,11 @@ async function bootstrap() {
     bodyParser: false,
   });
   const http = app.getHttpAdapter().getInstance();
+  const sendOk = (_req: express.Request, res: express.Response) => {
+    res.status(200).json({ status: 'ok' });
+  };
+  http.get('/', sendOk);
+  http.get('/health', sendOk);
   http.use(
     '/api/v1/webhooks/stripe',
     express.raw({ type: 'application/json' }),
@@ -77,7 +82,6 @@ async function bootstrap() {
     }),
   );
 
-  const port = Number(process.env.PORT ?? 4000);
-  await app.listen(port, '0.0.0.0');
+  await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }
 void bootstrap();

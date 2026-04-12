@@ -1,7 +1,7 @@
 # Stack: PostgreSQL + Nest API + Next Dashboard
 #
 # Browser API URL: set NEXT_PUBLIC_API_BASE_URL to how clients reach the API
-# (e.g. http://YOUR_SERVER_IP:4000/api/v1). Dashboard SSR uses INTERNAL_API_BASE_URL
+# (e.g. http://YOUR_SERVER_IP:4000/api/v1 when BACKEND_PORT defaults to 4000 → container :3000). Dashboard SSR uses INTERNAL_API_BASE_URL
 # to reach the backend inside the Docker network (service name `backend`).
 #
 # docker compose up --build
@@ -33,10 +33,10 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      - "${BACKEND_PORT:-4000}:3000"
     environment:
       NODE_ENV: production
-      PORT: '4000'
+      PORT: '3000'
       DATABASE_URL: ${DATABASE_URL:-postgresql://cloudsignage:cloudsignage_dev_password@db:5432/cloudsignage?schema=public}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-in-production}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-in-production}
@@ -49,7 +49,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'node -e "require(\"http\").get(\"http://127.0.0.1:4000/api/v1\",r=>process.exit(r.statusCode===200?0:1)).on(\"error\",()=>process.exit(1))"',
+          'node -e "require(\"http\").get(\"http://127.0.0.1:3000/health\",r=>process.exit(r.statusCode===200?0:1)).on(\"error\",()=>process.exit(1))"',
         ]
       interval: 10s
       timeout: 5s
@@ -74,7 +74,7 @@ services:
       # Browser → API (must be reachable from the user’s machine; use server IP/domain in production)
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api/v1}
       # Dashboard container (SSR) → API over the compose network
-      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:4000/api/v1}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:3000/api/v1}
 
 volumes:
   pgdata:
