@@ -7,34 +7,28 @@
 FROM node:20 AS builder
 WORKDIR /app
 
-# Install prisma globally first
 RUN npm install -g prisma
 
-# Copy manifest files
 COPY package*.json ./
 COPY apps/backend/package*.json ./apps/backend/
 COPY packages ./packages
 
-# Required for root workspaces ("apps/*") — npm install expects these manifests to exist
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/player/package.json apps/player/
 COPY apps/marketing/package.json apps/marketing/
 
-# Install all dependencies
 RUN npm install
 
-# Copy source code
 COPY apps/backend ./apps/backend
+
+# Re-run install so workspace links / hoisted bins exist after backend sources are present
+RUN npm install
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-# Run generate using the local binary path (avoids shell / npx resolution issues)
 RUN ./node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma
 
-# Build
 RUN npm run build --workspace=backend
-
-RUN npm prune --omit=dev
 
 FROM node:20-alpine
 WORKDIR /app
@@ -45,15 +39,14 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app ./
 
-# Builder is glibc; Alpine is musl — regenerate Prisma engines for this image.
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 RUN npm install -g prisma \
   && npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
 EXPOSE 4000
 
-# Backend listens on 0.0.0.0 and PORT (see apps/backend/src/main.ts). Railway sets PORT at runtime.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
   CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["sh", "-c", "npx --yes prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
+# Global `prisma` from prior RUN — avoids npx/sh resolving a missing local binary after prune-less copy
+CMD ["sh", "-c", "prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
