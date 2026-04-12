@@ -18,9 +18,9 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
-    "prisma:seed": "prisma db seed --schema prisma/schema.prisma"
+    "prisma:generate": "prisma generate --config prisma.config.ts",
+    "prisma:migrate": "prisma migrate dev --config prisma.config.ts",
+    "prisma:seed": "prisma db seed --config prisma.config.ts"
   },
   "prisma": {
     "seed": "npx ts-node --transpile-only prisma/seed.ts"
@@ -36,7 +36,7 @@
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.18",
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "7.7.0",
     "@sentry/nestjs": "^10.48.0",
     "@sentry/node": "^10.48.0",
     "bcryptjs": "^3.0.3",
@@ -76,7 +76,9 @@
     "globals": "^17.0.0",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
-    "prisma": "^6.19.3",
+    "@prisma/config": "7.7.0",
+    "dotenv": "^16.4.7",
+    "prisma": "7.7.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

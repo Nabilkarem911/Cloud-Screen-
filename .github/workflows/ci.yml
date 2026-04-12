@@ -24,14 +24,14 @@ jobs:
 
       - name: Prisma generate (backend)
         working-directory: apps/backend
-        run: npx prisma generate --schema=prisma/schema.prisma
+        run: npx prisma generate --config prisma.config.ts
 
       - name: i18n check (dashboard)
         run: npm run i18n:check
 
       - name: Prisma validate
         working-directory: apps/backend
-        run: npx prisma validate --schema=prisma/schema.prisma
+        run: npx prisma validate --config prisma.config.ts
 
       - name: Backend build
         run: npm run build -w apps/backend
