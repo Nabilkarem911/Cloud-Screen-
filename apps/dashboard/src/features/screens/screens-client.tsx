@@ -3,13 +3,14 @@
 
 import Link from 'next/link';
 import type { Route } from 'next';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import {
+  Loader2,
   MoreHorizontal,
   PenLine,
   Plus,
@@ -37,13 +38,20 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiFetch } from '@/features/auth/session';
+import {
+  apiFetch,
+  parseScreenLimitFromApiMessage,
+  readApiErrorMessage,
+} from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace-context';
-import { DemoDataButton } from '@/features/workspace/demo-data-button';
 import { cn } from '@/lib/utils';
 import { ScreenQuickEditPanel } from '@/features/screens/screen-quick-edit-panel';
 import { useScreenActivePreview } from '@/features/screens/use-screen-active-preview';
 import { useApiScreens, type ScreenRow, type ScreenStatus } from './useApiScreens';
+import {
+  deriveFleetReachability,
+  ScreenFleetStatusBadge,
+} from '@/features/screens/screen-fleet-status';
 import { useScreenRealtime } from './useScreenRealtime';
 
 const screenSchema = z.object({
@@ -60,36 +68,7 @@ type Props = {
   locale: string;
 };
 
-function LiveBadge({ status }: { status: ScreenStatus }) {
-  const t = useTranslations('screensClient');
-  const live = status === 'ONLINE';
-  const maintenance = status === 'MAINTENANCE';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]',
-        live &&
-          'border border-emerald-400/40 bg-emerald-500/15 text-emerald-100 shadow-[0_0_18px_rgba(16,185,129,0.45)]',
-        !live &&
-          maintenance &&
-          'border border-amber-400/35 bg-amber-500/12 text-amber-100 shadow-[0_0_14px_rgba(245,158,11,0.35)]',
-        !live &&
-          !maintenance &&
-          'border border-red-400/35 bg-red-500/12 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.35)]',
-      )}
-    >
-      <span
-        className={cn(
-          'h-1.5 w-1.5 rounded-full',
-          live && 'animate-pulse bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]',
-          maintenance && 'bg-amber-400',
-          !live && !maintenance && 'bg-red-400',
-        )}
-      />
-      {live ? t('status.live') : maintenance ? t('status.maintenance') : t('status.offline')}
-    </span>
-  );
-}
+type PlaylistOption = { id: string; name: string };
 
 function ScreenVisualCard({
   screen,
@@ -100,6 +79,10 @@ function ScreenVisualCard({
   onEdit,
   onDelete,
   onRemote,
+  playlists,
+  canAssignPlayback,
+  assignPlaylistBusy,
+  onAssignPlaybackPlaylist,
 }: {
   screen: ScreenRow;
   locale: string;
@@ -109,9 +92,17 @@ function ScreenVisualCard({
   onEdit: (s: ScreenRow) => void;
   onDelete: (id: string) => void;
   onRemote: (id: string, c: 'refresh_content' | 'restart') => void;
+  playlists: PlaylistOption[];
+  canAssignPlayback: boolean;
+  assignPlaylistBusy: boolean;
+  onAssignPlaybackPlaylist: (screenId: string, playlistId: string | null) => Promise<void>;
 }) {
   const t = useTranslations('screensClient');
-  const { previewUrl, loading } = useScreenActivePreview(screen.id, workspaceId);
+  const { previewUrl, loading, previewRev } = useScreenActivePreview(
+    screen.id,
+    workspaceId,
+  );
+  const reach = deriveFleetReachability(screen.status, screen.lastSeenAt);
 
   return (
     <motion.article
@@ -125,7 +116,7 @@ function ScreenVisualCard({
         'border border-[rgba(147,51,234,0.28)] bg-[hsl(260_32%_11%/0.42)] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.45)] backdrop-blur-[36px]',
         'ring-1 ring-[rgba(255,107,0,0.18)] transition-[border-color,box-shadow] duration-300',
         'hover:border-[rgba(255, 107, 0,0.28)] hover:shadow-[0_0_40px_-12px_rgba(255, 107, 0,0.1)]',
-        screen.status === 'ONLINE' && 'ngl-screen-card-live',
+        reach === 'online' && 'ngl-screen-card-live',
       )}
     >
       <button
@@ -137,6 +128,7 @@ function ScreenVisualCard({
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
+              key={`${previewUrl}-${previewRev}`}
               src={previewUrl}
               alt=""
               className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
@@ -152,7 +144,11 @@ function ScreenVisualCard({
             </div>
           ) : null}
           <div className="absolute start-3 top-3">
-            <LiveBadge status={screen.status} />
+            <ScreenFleetStatusBadge
+              status={screen.status}
+              lastSeenAt={screen.lastSeenAt}
+              locale={locale}
+            />
           </div>
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 pt-10">
             <p className="truncate text-base font-semibold text-white drop-shadow-md">{screen.name}</p>
@@ -162,10 +158,41 @@ function ScreenVisualCard({
       </button>
 
       <div className="flex flex-1 flex-col gap-3 border-t border-white/10 bg-white/[0.04] p-4 dark:bg-black/10">
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">
-            {screen.activePlaylist?.name ?? t('noPlaylist')}
-          </p>
+        <div className="space-y-1.5">
+          <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('playbackPlaylist')}
+          </label>
+          <div className="relative">
+            <select
+              className={cn(
+                'h-10 w-full cursor-pointer appearance-none rounded-xl border border-white/15 bg-black/25 px-3 pe-9 text-[13px] font-medium text-foreground outline-none',
+                'focus-visible:border-[#FF6B00]/50 focus-visible:ring-2 focus-visible:ring-[#FF6B00]/25',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+              disabled={!canAssignPlayback || assignPlaylistBusy}
+              value={screen.activePlaylistId ?? ''}
+              aria-label={t('playbackPlaylistAria')}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const v = e.target.value;
+                void onAssignPlaybackPlaylist(screen.id, v || null);
+              }}
+            >
+              <option value="">{t('playbackPlaylistNone')}</option>
+              {playlists.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name}
+                </option>
+              ))}
+            </select>
+            {assignPlaylistBusy ? (
+              <span className="pointer-events-none absolute end-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-[#FF6B00]" />
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-xl">
@@ -224,9 +251,85 @@ function ScreenVisualCard({
 
 export function ScreensClient({ locale }: Props) {
   const t = useTranslations('screensClient');
-  const { workspaceId, bumpWorkspaceDataEpoch } = useWorkspace();
+  const { workspaceId, workspaces, workspaceDataEpoch, bumpWorkspaceDataEpoch } =
+    useWorkspace();
   const { screens, setScreens, isLoading, reload } = useApiScreens(workspaceId);
   useScreenRealtime(workspaceId, setScreens);
+
+  const canAssignPlayback = useMemo(() => {
+    const r = workspaces.find((w) => w.id === workspaceId)?.role;
+    return r === 'OWNER' || r === 'ADMIN' || r === 'EDITOR';
+  }, [workspaces, workspaceId]);
+
+  const [playlists, setPlaylists] = useState<PlaylistOption[]>([]);
+  const [assignPlaylistScreenId, setAssignPlaylistScreenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setPlaylists([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const res = await apiFetch(
+        `/playlists?workspaceId=${encodeURIComponent(workspaceId)}`,
+      );
+      if (!res.ok || cancelled) return;
+      const rows = (await res.json()) as PlaylistOption[];
+      setPlaylists(Array.isArray(rows) ? rows : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, workspaceDataEpoch]);
+
+  const reloadScreensAndBump = useCallback(async () => {
+    await reload();
+    bumpWorkspaceDataEpoch();
+  }, [reload, bumpWorkspaceDataEpoch]);
+
+  const assignPlaybackPlaylist = useCallback(
+    async (screenId: string, playlistId: string | null) => {
+      if (!workspaceId) return;
+      setAssignPlaylistScreenId(screenId);
+      try {
+        const res = await apiFetch(
+          `/screens/${encodeURIComponent(screenId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ activePlaylistId: playlistId }),
+          },
+        );
+        if (!res.ok) {
+          toast.error(t('playlistAssignFailed'));
+          return;
+        }
+        const name =
+          playlistId === null
+            ? null
+            : (playlists.find((p) => p.id === playlistId)?.name ?? null);
+        setScreens((prev) =>
+          prev.map((s) =>
+            s.id === screenId
+              ? {
+                  ...s,
+                  activePlaylistId: playlistId,
+                  activePlaylist:
+                    playlistId && name ? { id: playlistId, name } : null,
+                }
+              : s,
+          ),
+        );
+        toast.success(t('playlistAssignedToast'));
+        bumpWorkspaceDataEpoch();
+      } finally {
+        setAssignPlaylistScreenId(null);
+      }
+    },
+    [workspaceId, playlists, setScreens, bumpWorkspaceDataEpoch, t],
+  );
+
   const [selected, setSelected] = useState<ScreenRow | null>(null);
   const [openAdd, setOpenAdd] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
@@ -271,8 +374,11 @@ export function ScreensClient({ locale }: Props) {
           ? t('remoteRefreshOk')
           : t('remotePowerOk'),
       );
+      if (command === 'refresh_content') {
+        bumpWorkspaceDataEpoch();
+      }
     },
-    [workspaceId, t],
+    [workspaceId, t, bumpWorkspaceDataEpoch],
   );
 
   const openQuick = (s: ScreenRow) => {
@@ -335,7 +441,13 @@ export function ScreensClient({ locale }: Props) {
           <p className="max-w-md text-center text-sm text-muted-foreground">
             {t('emptyDescription')}
           </p>
-          <DemoDataButton onDone={() => void reload()} />
+          <Button
+            className="rounded-2xl bg-gradient-to-r from-[#FF6B00] to-[#CC4400] font-semibold shadow-lg shadow-[#0F1729]/30"
+            onClick={() => setOpenAdd(true)}
+          >
+            <Plus className="me-2 h-4 w-4" />
+            {t('addScreen')}
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -353,6 +465,10 @@ export function ScreensClient({ locale }: Props) {
               }}
               onDelete={(id) => void onDelete(id)}
               onRemote={(id, cmd) => void sendRemoteCommand(id, cmd)}
+              playlists={playlists}
+              canAssignPlayback={canAssignPlayback}
+              assignPlaylistBusy={assignPlaylistScreenId === screen.id}
+              onAssignPlaybackPlaylist={assignPlaybackPlaylist}
             />
           ))}
         </div>
@@ -364,7 +480,7 @@ export function ScreensClient({ locale }: Props) {
         screen={quickScreen}
         workspaceId={workspaceId}
         locale={locale}
-        onSaved={reload}
+        onSaved={reloadScreensAndBump}
         onEditScreen={() => {
           if (quickScreen) {
             setSelected(quickScreen);
@@ -382,6 +498,7 @@ export function ScreensClient({ locale }: Props) {
               setOpenEdit(false);
               setSelected(null);
               await reload();
+              bumpWorkspaceDataEpoch();
             }}
           />
         ) : null}
@@ -416,7 +533,13 @@ function CreateScreenDialogContent({
       }),
     });
     if (!response.ok) {
-      toast.error(t('createFailed'));
+      const msg = await readApiErrorMessage(response);
+      const limit = parseScreenLimitFromApiMessage(msg);
+      if (limit !== null) {
+        toast.error(t('screenLimitReached', { limit }));
+      } else {
+        toast.error(msg || t('createFailed'));
+      }
       return;
     }
     toast.success(t('createSuccess'));

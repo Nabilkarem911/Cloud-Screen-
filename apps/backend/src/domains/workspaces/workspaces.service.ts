@@ -4,9 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ScreenStatus, SubscriptionPlan, SubscriptionStatus } from '@prisma/client';
+import type { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import {
+  ScreenStatus,
+  SubscriptionPlan,
+  SubscriptionStatus,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import { ScreenHeartbeatService } from '../realtime/screen-heartbeat.service';
 
 /** Minimal valid 1×1 PNG (transparent). */
 const DEMO_PNG = Buffer.from(
@@ -19,16 +26,17 @@ export class WorkspacesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly heartbeat: ScreenHeartbeatService,
   ) {}
 
   /**
-   * When the database has zero workspaces, create Admin Control + demo data (super-admin login).
+   * When the database has zero workspaces, create an empty Admin Control workspace (super-admin).
+   * No sample playlists, screens, or media — tenants add content manually.
    */
   async ensureAdminControlEntry(userId: string): Promise<void> {
     const total = await this.prisma.workspace.count();
     if (total > 0) return;
-    const ws = await this.createForUser(userId, 'Admin Control');
-    await this.seedDemoContent(ws.id);
+    await this.createForUser(userId, 'Admin Control');
   }
 
   async createForUser(userId: string, name: string) {
@@ -48,6 +56,7 @@ export class WorkspacesService {
               status: SubscriptionStatus.TRIALING,
               seats: 5,
               screenLimit: 25,
+              storageLimitBytes: 5 * 1024 * 1024 * 1024,
             },
           },
         },
@@ -81,7 +90,9 @@ export class WorkspacesService {
   }
 
   async seedDemoContent(workspaceId: string) {
-    const screenCount = await this.prisma.screen.count({ where: { workspaceId } });
+    const screenCount = await this.prisma.screen.count({
+      where: { workspaceId },
+    });
     if (screenCount < 2) {
       const base = Date.now();
       const templates = [
@@ -110,7 +121,9 @@ export class WorkspacesService {
       }
     }
 
-    const mediaCount = await this.prisma.media.count({ where: { workspaceId } });
+    const mediaCount = await this.prisma.media.count({
+      where: { workspaceId },
+    });
     const samples = [
       { originalName: 'sample-hero.png', mimeType: 'image/png' },
       { originalName: 'sample-promo.png', mimeType: 'image/png' },
@@ -195,7 +208,9 @@ export class WorkspacesService {
     });
     if (!m) throw new NotFoundException('Workspace not found');
     if (m.role !== 'OWNER' && m.role !== 'ADMIN') {
-      throw new ForbiddenException('Only owners and admins can seed demo content.');
+      throw new ForbiddenException(
+        'Only owners and admins can seed demo content.',
+      );
     }
     return this.seedDemoContent(workspaceId);
   }
@@ -232,7 +247,14 @@ export class WorkspacesService {
     workspaceId: string,
     email: string,
     role: string,
-  ): { ok: true; demo: true; message: string; workspaceId: string; email: string; role: string } {
+  ): {
+    ok: true;
+    demo: true;
+    message: string;
+    workspaceId: string;
+    email: string;
+    role: string;
+  } {
     return {
       ok: true,
       demo: true,
@@ -244,6 +266,76 @@ export class WorkspacesService {
     };
   }
 
+  async updateWorkspace(userId: string, workspaceId: string, dto: UpdateWorkspaceDto) {
+    await this.assertWorkspaceAccess(workspaceId, userId, true);
+    if (dto.name === undefined && dto.isPaused === undefined) {
+      throw new BadRequestException('No fields to update.');
+    }
+    const data: { name?: string; slug?: string; isPaused?: boolean } = {};
+    if (dto.name !== undefined) {
+      const trimmed = dto.name.trim();
+      if (trimmed.length < 2) {
+        throw new BadRequestException('Workspace name is too short.');
+      }
+      data.name = trimmed;
+      data.slug = this.makeSlug(trimmed);
+    }
+    if (dto.isPaused !== undefined) {
+      data.isPaused = dto.isPaused;
+    }
+    return this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data,
+      select: { id: true, name: true, slug: true, isPaused: true },
+    });
+  }
+
+  async deleteWorkspace(userId: string, workspaceId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (!user?.isSuperAdmin) {
+      const membership = await this.prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { role: true },
+      });
+      if (!membership) throw new NotFoundException('Workspace not found');
+      if (membership.role !== 'OWNER' && membership.role !== 'ADMIN') {
+        throw new ForbiddenException(
+          'Only workspace owners and admins can delete this branch.',
+        );
+      }
+    }
+    await this.prisma.workspace.delete({ where: { id: workspaceId } });
+  }
+
+  private async assertWorkspaceAccess(
+    workspaceId: string,
+    userId: string,
+    requireAdmin: boolean,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (user?.isSuperAdmin) return;
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { role: true },
+    });
+    if (!membership) throw new NotFoundException('Workspace not found');
+    if (
+      requireAdmin &&
+      membership.role !== 'OWNER' &&
+      membership.role !== 'ADMIN'
+    ) {
+      throw new ForbiddenException(
+        'Only owners and admins can update this workspace.',
+      );
+    }
+  }
+
   private makeSlug(name: string): string {
     const base = name
       .toLowerCase()
@@ -253,4 +345,36 @@ export class WorkspacesService {
     const suffix = Date.now().toString(36);
     return `${base || 'workspace'}-${suffix}`;
   }
+
+  /**
+   * Emits `pairing:started` on `workspace:{id}` so dashboards in the Add Screen flow
+   * can show live feedback (also call when the pairing modal opens).
+   */
+  async notifyPairingStarted(
+    userId: string,
+    workspaceId: string,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (!user?.isSuperAdmin) {
+      const m = await this.prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { role: true },
+      });
+      if (!m) throw new NotFoundException('Workspace not found');
+      if (m.role !== UserRole.OWNER && m.role !== UserRole.ADMIN) {
+        throw new ForbiddenException(
+          'Only owners and admins can signal pairing activity.',
+        );
+      }
+    }
+    this.heartbeat.emitPairingStarted(workspaceId, {
+      source: 'dashboard',
+      at: new Date().toISOString(),
+    });
+    return { ok: true as const };
+  }
+
 }

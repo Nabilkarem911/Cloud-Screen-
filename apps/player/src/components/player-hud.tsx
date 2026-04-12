@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { isPrimarilyArabicScript } from '@/lib/ticker-direction';
 
 type Props = {
   tickerText: string | null;
@@ -39,6 +40,10 @@ export function PlayerHud({ tickerText }: Props) {
   }, []);
 
   const displayTicker = tickerText?.trim() || '';
+  const rtlTicker = useMemo(
+    () => isPrimarilyArabicScript(displayTicker),
+    [displayTicker],
+  );
 
   return (
     <>
@@ -71,7 +76,11 @@ export function PlayerHud({ tickerText }: Props) {
 
       {displayTicker ? (
         <div className="pointer-events-none fixed bottom-0 left-0 right-0 z-[480] overflow-hidden border-t border-cyan-500/15 bg-gradient-to-t from-black/90 via-black/60 to-transparent py-2.5">
-          <div className="eclipse-marquee flex whitespace-nowrap font-mono text-sm text-cyan-100/95">
+          <div
+            className={`eclipse-marquee flex whitespace-nowrap text-sm text-cyan-100/95 font-sans [font-feature-settings:normal]${rtlTicker ? ' eclipse-marquee-rtl' : ''}`}
+            dir={rtlTicker ? 'rtl' : 'ltr'}
+            lang={rtlTicker ? 'ar' : undefined}
+          >
             <span className="inline-block min-w-full shrink-0 px-6">
               {displayTicker}
               <span className="mx-16 text-white/35">◆</span>

@@ -1,0 +1,6 @@
+﻿node_modules
+**/node_modules
+apps/backend/dist
+apps/dashboard/.next
+apps/player/.next
+apps/marketing/.next

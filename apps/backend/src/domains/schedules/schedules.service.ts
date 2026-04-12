@@ -62,7 +62,11 @@ export class SchedulesService {
   }
 
   async create(dto: CreateScheduleDto) {
-    await this.ensureRefs(dto.workspaceId, dto.playlistId, dto.screenId ?? null);
+    await this.ensureRefs(
+      dto.workspaceId,
+      dto.playlistId,
+      dto.screenId ?? null,
+    );
 
     const created = await this.prisma.schedule.create({
       data: {
@@ -153,13 +157,20 @@ export class SchedulesService {
     }
   }
 
+  /**
+   * After any schedule create/update/delete, push the recomputed playlist to every
+   * affected screen (workspace-wide schedules fan out to all screens).
+   * Uses `content:sync` plus `schedule:changed` so all player listeners receive the update.
+   */
   private async broadcastAffected(
     workspaceId: string,
     screenId: string | null,
   ): Promise<void> {
     const ids = await this.affectedScreenIds(workspaceId, screenId);
     for (const sid of ids) {
-      await this.playlists.emitPlaylistForScreen(sid);
+      await this.playlists.emitPlaylistForScreen(sid, {
+        alsoEmitScheduleSignal: true,
+      });
     }
   }
 

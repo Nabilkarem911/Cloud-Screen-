@@ -10,6 +10,8 @@
     "i18n:missing-marker-scan": "node scripts/i18n-missing-marker-scan.cjs",
     "i18n:check": "npm run i18n:key-parity && npm run i18n:hardcoded-scan && npm run i18n:missing-marker-scan",
     "dev": "npm run env:sync && concurrently -n dashboard,backend,player -c cyan,green,magenta -m 3 \"npm run dev -w apps/dashboard\" \"npm run start:dev -w apps/backend\" \"npm run dev -w apps/player\"",
+    "dev:marketing": "npm run dev -w apps/marketing",
+    "dev:fresh": "npm run clean && npm run dev",
     "build": "npm run build -w apps/dashboard && npm run build -w apps/backend && npm run build -w apps/player",
     "lint": "npm run lint -w apps/dashboard && npm run lint -w apps/backend && npm run lint -w apps/player",
     "format": "prettier --write ."

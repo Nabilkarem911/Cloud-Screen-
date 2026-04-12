@@ -10,5 +10,6 @@ import { ScreensService } from './screens.service';
   imports: [PlaylistsModule, RealtimeModule, SchedulingModule],
   controllers: [ScreensController],
   providers: [ScreensService, RolesGuard],
+  exports: [ScreensService],
 })
 export class ScreensModule {}

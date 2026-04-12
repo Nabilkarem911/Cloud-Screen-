@@ -26,6 +26,15 @@ export async function readApiErrorMessage(response: Response): Promise<string> {
   return text.length > 800 ? `${text.slice(0, 800)}…` : text;
 }
 
+const SCREEN_LIMIT_PREFIX = 'SCREEN_LIMIT_REACHED:';
+
+/** Parses `SCREEN_LIMIT_REACHED:{n}` from Nest `BadRequestException` bodies. */
+export function parseScreenLimitFromApiMessage(message: string): number | null {
+  if (!message.startsWith(SCREEN_LIMIT_PREFIX)) return null;
+  const n = Number(message.slice(SCREEN_LIMIT_PREFIX.length));
+  return Number.isFinite(n) ? n : null;
+}
+
 export type ApiFetchInit = RequestInit & { omitAuth?: boolean };
 
 const ACCESS_TOKEN_STORAGE_KEY = 'cs_access_token';

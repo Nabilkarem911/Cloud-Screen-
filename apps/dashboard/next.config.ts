@@ -1,5 +1,6 @@
 import path from 'path';
 import { config } from 'dotenv';
+import { withSentryConfig } from '@sentry/nextjs';
 import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from 'next';
 
@@ -12,4 +13,12 @@ const nextConfig: NextConfig = {
 };
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
-export default withNextIntl(nextConfig);
+const withIntl = withNextIntl(nextConfig);
+
+const sentryDsn =
+  process.env.NEXT_PUBLIC_SENTRY_DSN?.trim() ||
+  process.env.SENTRY_DSN?.trim();
+
+export default sentryDsn
+  ? withSentryConfig(withIntl, { silent: true })
+  : withIntl;

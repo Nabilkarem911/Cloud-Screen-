@@ -9,7 +9,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiFetch, setStoredAccessToken } from '@/features/auth/session';
+import {
+  apiFetch,
+  readApiErrorMessage,
+  setStoredAccessToken,
+} from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace-context';
 import { COUNTRIES, guessCountryCode } from '@/lib/countries';
 
@@ -17,6 +21,7 @@ type Step = 'form' | 'otp';
 
 export function RegisterClient() {
   const t = useTranslations('registerClient');
+  const tLegal = useTranslations('legal');
   const locale = useLocale();
   const router = useRouter();
   const { refreshWorkspaces } = useWorkspace();
@@ -60,7 +65,7 @@ export function RegisterClient() {
         return;
       }
       if (!res.ok) {
-        toast.error(t('registerFailed'));
+        toast.error(await readApiErrorMessage(res).catch(() => t('registerFailed')));
         return;
       }
       toast.success(t('otpSent'));
@@ -79,7 +84,7 @@ export function RegisterClient() {
         body: JSON.stringify({ email, code: otp }),
       });
       if (!res.ok) {
-        toast.error(t('invalidCode'));
+        toast.error(await readApiErrorMessage(res).catch(() => t('invalidCode')));
         return;
       }
       const payload = (await res.json()) as {
@@ -92,6 +97,24 @@ export function RegisterClient() {
       toast.success(t('welcome'));
       router.push(`/${locale}/media` as Route);
       router.refresh();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    if (!email.trim()) return;
+    setPending(true);
+    try {
+      const res = await apiFetch('/auth/register/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res).catch(() => t('resendFailed')));
+        return;
+      }
+      toast.success(t('resendSent'));
     } finally {
       setPending(false);
     }
@@ -234,10 +257,37 @@ export function RegisterClient() {
                 >
                   {t('back')}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-2xl border-white/20 bg-transparent text-white/85 hover:bg-white/5"
+                  disabled={pending}
+                  onClick={() => void resendOtp()}
+                >
+                  {pending ? t('resending') : t('resendCode')}
+                </Button>
               </form>
             )}
 
-            <p className="mt-8 text-center text-sm text-white/50">
+            <p className="mt-6 text-center text-xs leading-relaxed text-white/50">
+              {t('legalPrefix')}{' '}
+              <Link
+                href={`/${locale}/terms`}
+                className="font-semibold text-[#FF6B00] underline-offset-4 hover:underline"
+              >
+                {tLegal('termsLink')}
+              </Link>{' '}
+              {t('legalAnd')}{' '}
+              <Link
+                href={`/${locale}/privacy`}
+                className="font-semibold text-[#FF6B00] underline-offset-4 hover:underline"
+              >
+                {tLegal('privacyLink')}
+              </Link>
+              .
+            </p>
+
+            <p className="mt-6 text-center text-sm text-white/50">
               <Link href={`/${locale}/login`} className="font-semibold text-[#FF6B00] underline-offset-4 hover:underline">
                 {t('backToSignIn')}
               </Link>

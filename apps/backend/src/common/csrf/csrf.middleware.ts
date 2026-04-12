@@ -18,6 +18,8 @@ export class CsrfMiddleware implements NestMiddleware {
       '/api/v1/auth/reset-password',
       '/api/v1/auth/refresh',
       '/api/v1/auth/dev-login',
+      '/api/v1/webhooks/stripe',
+      '/api/v1/player/pairing/sessions',
     ];
     if (exemptPrefixes.some((prefix) => path.startsWith(prefix))) {
       next();

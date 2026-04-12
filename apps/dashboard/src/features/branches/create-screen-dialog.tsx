@@ -14,7 +14,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { apiFetch, readApiErrorMessage } from '@/features/auth/session';
+import {
+  apiFetch,
+  parseScreenLimitFromApiMessage,
+  readApiErrorMessage,
+} from '@/features/auth/session';
 
 type PlaylistRow = { id: string; name: string };
 
@@ -117,7 +121,13 @@ export function CreateScreenDialog({ open, onOpenChange, workspaceId, onCreated 
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res));
+        const msg = await readApiErrorMessage(res);
+        const limit = parseScreenLimitFromApiMessage(msg);
+        if (limit !== null) {
+          toast.error(t('screenLimitReached', { limit }));
+        } else {
+          toast.error(msg);
+        }
         return;
       }
       toast.success(t('success'));

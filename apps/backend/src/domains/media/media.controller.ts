@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   Query,
@@ -36,6 +38,7 @@ export class MediaController {
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Query('workspaceId') workspaceId: string,
+    @Query('folderId') folderId?: string,
   ) {
     if (!workspaceId) {
       throw new BadRequestException('workspaceId is required');
@@ -49,6 +52,7 @@ export class MediaController {
       originalName: file.originalname,
       mimeType: file.mimetype,
       size: file.size,
+      folderId: folderId ?? null,
     });
     return this.mediaService.toResponse(created);
   }
@@ -66,5 +70,62 @@ export class MediaController {
     @Query('workspaceId') workspaceId: string,
   ): Promise<void> {
     await this.mediaService.remove(workspaceId, id);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR, UserRole.VIEWER)
+  @Get('folders/list')
+  listFolders(@Query('workspaceId') workspaceId: string) {
+    if (!workspaceId) {
+      throw new BadRequestException('workspaceId is required');
+    }
+    return this.mediaService.listFolders(workspaceId);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Post('folders')
+  createFolder(
+    @Query('workspaceId') workspaceId: string,
+    @Body() body: { name?: string },
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    if (!body?.name) throw new BadRequestException('name is required');
+    return this.mediaService.createFolder(workspaceId, body.name);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Patch('folders/:id')
+  renameFolder(
+    @Param('id') id: string,
+    @Query('workspaceId') workspaceId: string,
+    @Body() body: { name?: string },
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    if (!body?.name) throw new BadRequestException('name is required');
+    return this.mediaService.renameFolder(workspaceId, id, body.name);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Delete('folders/:id')
+  deleteFolder(
+    @Param('id') id: string,
+    @Query('workspaceId') workspaceId: string,
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    return this.mediaService.deleteFolder(workspaceId, id);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Patch(':id/folder')
+  moveMediaFolder(
+    @Param('id') id: string,
+    @Query('workspaceId') workspaceId: string,
+    @Body() body: { folderId?: string | null },
+  ) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    return this.mediaService.moveMediaToFolder(
+      workspaceId,
+      id,
+      body?.folderId ?? null,
+    );
   }
 }

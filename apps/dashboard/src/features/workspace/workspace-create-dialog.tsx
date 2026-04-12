@@ -41,12 +41,7 @@ export function WorkspaceCreateDialog({ open, onOpenChange, onCreated }: Props) 
   const t = useTranslations('workspaceCreateDialog');
   const locale = useLocale();
   const router = useRouter();
-  const {
-    refreshWorkspaces,
-    setWorkspaceId,
-    workspaces,
-    bumpWorkspaceDataEpoch,
-  } = useWorkspace();
+  const { refreshWorkspaces, setWorkspaceId, bumpWorkspaceDataEpoch } = useWorkspace();
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -56,7 +51,6 @@ export function WorkspaceCreateDialog({ open, onOpenChange, onCreated }: Props) 
       toast.error(t('nameMin'));
       return;
     }
-    const wasFirstWorkspace = workspaces.length === 0;
     setSaving(true);
     try {
       const res = await apiFetch('/workspaces', {
@@ -72,32 +66,14 @@ export function WorkspaceCreateDialog({ open, onOpenChange, onCreated }: Props) 
 
       await refreshWorkspaces(created.id);
       setWorkspaceId(created.id);
-
-      let demoLoaded = false;
-      let seedFailed = false;
-      if (wasFirstWorkspace) {
-        const seedRes = await apiFetch(`/workspaces/${created.id}/seed-demo`, {
-          method: 'POST',
-        });
-        if (seedRes.ok) {
-          demoLoaded = true;
-          bumpWorkspaceDataEpoch();
-        } else {
-          seedFailed = true;
-          toast.error(t('demoSetupFailed', { reason: await readApiError(seedRes) }));
-        }
-      }
+      bumpWorkspaceDataEpoch();
 
       setName('');
       onOpenChange(false);
       router.refresh();
-      router.push(`/${locale}/media`);
+      router.push(`/${locale}/overview`);
 
-      if (demoLoaded) {
-        toast.success(t('demoLoaded'));
-      } else if (!seedFailed) {
-        toast.success(t('workspaceReady', { name: created.name }));
-      }
+      toast.success(t('workspaceReady', { name: created.name }));
 
       onCreated?.();
     } finally {

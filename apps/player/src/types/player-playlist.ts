@@ -43,6 +43,8 @@ export type BootstrapResponse = {
   screenId: string;
   serialNumber: string;
   workspaceId: string;
+  /** Display name for idle / placeholder UI when no playlist is assigned. */
+  workspaceName?: string | null;
   ticker: string | null;
   playlist: PlaylistPayload;
 };

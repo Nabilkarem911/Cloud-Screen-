@@ -16,7 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
-import { SuperAdminGuard } from '../../common/auth/super-admin.guard';
+import { SuperAdminDbGuard } from '../../common/auth/super-admin-db.guard';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { JwtUser } from '../../common/auth/current-user.decorator';
 import { setAuthCookies } from '../auth/auth-cookie.util';
@@ -32,7 +32,7 @@ import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
 import { BrandingAssetsService } from './branding-assets.service';
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, SuperAdminGuard)
+@UseGuards(JwtAuthGuard, SuperAdminDbGuard)
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
@@ -72,7 +72,10 @@ export class AdminController {
     @Param('customerId') customerId: string,
     @Param('workspaceId') workspaceId: string,
   ) {
-    return this.adminService.getCustomerWorkspaceDetail(customerId, workspaceId);
+    return this.adminService.getCustomerWorkspaceDetail(
+      customerId,
+      workspaceId,
+    );
   }
 
   @Get('customers/:id')
@@ -125,6 +128,27 @@ export class AdminController {
   @Get('workspaces')
   listWorkspaces() {
     return this.adminService.listWorkspaces();
+  }
+
+  @Get('fleet/screens')
+  listGlobalFleetScreens() {
+    return this.adminService.listGlobalFleetScreens();
+  }
+
+  @Get('screens')
+  listGlobalScreens() {
+    return this.adminService.listGlobalFleetScreens();
+  }
+
+  @Patch('workspaces/:workspaceId/subscription-mock')
+  mockWorkspaceSubscription(
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { plan?: 'FREE' | 'PRO' },
+  ) {
+    return this.adminService.mockWorkspaceSubscriptionPlan(
+      workspaceId,
+      body.plan ?? 'FREE',
+    );
   }
 
   @Get('stats')

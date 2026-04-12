@@ -15,7 +15,10 @@ import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/auth/roles.guard';
 import { Roles } from '../../common/auth/roles.decorator';
-import { CurrentUser, type JwtUser } from '../../common/auth/current-user.decorator';
+import {
+  CurrentUser,
+  type JwtUser,
+} from '../../common/auth/current-user.decorator';
 import { CreateCanvasDto } from './dto/create-canvas.dto';
 import { UpdateCanvasDto } from './dto/update-canvas.dto';
 import { CanvasesService } from './canvases.service';

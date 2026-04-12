@@ -59,7 +59,7 @@ type ScreenOpt = { id: string; name: string };
 
 export function SchedulesClient({ locale }: { locale: string }) {
   const t = useTranslations('schedules');
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, bumpWorkspaceDataEpoch } = useWorkspace();
   const [schedules, setSchedules] = useState<ScheduleApi[]>([]);
   const [pairs, setPairs] = useState<Array<[string, string]>>([]);
   const [playlists, setPlaylists] = useState<PlaylistOpt[]>([]);
@@ -165,8 +165,9 @@ export function SchedulesClient({ locale }: { locale: string }) {
       return;
     }
     toast.success(t('saved'));
+    bumpWorkspaceDataEpoch();
     await load();
-  }, [workspaceId, load, t]);
+  }, [workspaceId, load, t, bumpWorkspaceDataEpoch]);
 
   useEffect(() => {
     if (!dragActive) return;
@@ -201,6 +202,7 @@ export function SchedulesClient({ locale }: { locale: string }) {
       return;
     }
     toast.success(t('overrideOk'));
+    bumpWorkspaceDataEpoch();
   };
 
   if (!workspaceId) {
@@ -236,6 +238,7 @@ export function SchedulesClient({ locale }: { locale: string }) {
               screens={screens}
               onCreated={() => {
                 setOpenCreate(false);
+                bumpWorkspaceDataEpoch();
                 void load();
                 toast.success(t('saved'));
               }}
@@ -442,6 +445,7 @@ export function SchedulesClient({ locale }: { locale: string }) {
                     );
                     if (res.ok) {
                       toast.success(t('deleted'));
+                      bumpWorkspaceDataEpoch();
                       void load();
                     } else toast.error(t('deleteFailed'));
                   }}

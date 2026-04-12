@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { Loader2, Monitor, PenLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/features/auth/session';
+import { CreateScreenDialog } from '@/features/branches/create-screen-dialog';
 import { useWorkspace } from '@/features/workspace/workspace-context';
 import { ScreenQuickEditPanel } from '@/features/screens/screen-quick-edit-panel';
 import { useApiScreens, type ScreenRow } from '@/features/screens/useApiScreens';
@@ -68,6 +69,7 @@ export function PlaylistScreensClient({ locale }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [editScreen, setEditScreen] = useState<ScreenRow | null>(null);
   const [playlistName, setPlaylistName] = useState<string | null>(null);
+  const [createScreenOpen, setCreateScreenOpen] = useState(false);
 
   useEffect(() => {
     if (workspaceIdParam) {
@@ -131,6 +133,13 @@ export function PlaylistScreensClient({ locale }: Props) {
         <div className="vc-card-surface rounded-2xl border border-dashed border-[#FF6B00]/25 p-10 text-center">
           <Monitor className="mx-auto h-10 w-10 text-[#FF6B00]/70" strokeWidth={ICON_STROKE} />
           <p className="mt-3 text-sm font-medium text-foreground dark:text-white">{t('empty')}</p>
+          <Button
+            type="button"
+            className="mt-6 rounded-xl bg-[#FF6B00] font-semibold text-amber-950 hover:bg-[#FF6B00]/90"
+            onClick={() => setCreateScreenOpen(true)}
+          >
+            {t('addScreen')}
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -181,6 +190,16 @@ export function PlaylistScreensClient({ locale }: Props) {
         onSaved={reload}
         onEditScreen={() => {
           /* full editor not routed separately */
+        }}
+      />
+
+      <CreateScreenDialog
+        open={createScreenOpen}
+        onOpenChange={setCreateScreenOpen}
+        workspaceId={workspaceIdParam}
+        onCreated={() => {
+          bumpWorkspaceDataEpoch();
+          void reload();
         }}
       />
     </main>

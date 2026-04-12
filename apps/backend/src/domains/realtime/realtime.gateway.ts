@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { ScreenStatus } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+import { ScreenPairingSessionStatus, ScreenStatus } from '@prisma/client';
 import {
   ConnectedSocket,
   MessageBody,
@@ -24,6 +25,11 @@ type ScreenRegisterPayload = {
 
 type DashboardSubscribePayload = {
   workspaceId: string;
+};
+
+type PairingWatchPayload = {
+  sessionId: string;
+  pollSecret: string;
 };
 
 type JwtAccessPayload = {
@@ -53,6 +59,8 @@ type JwtAccessPayload = {
 export class RealtimeGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
+  private readonly log = new Logger(RealtimeGateway.name);
+
   @WebSocketServer()
   server!: Server;
 
@@ -78,15 +86,68 @@ export class RealtimeGateway
     if (binding) {
       await this.prisma.screen.update({
         where: { id: binding.screenId },
-        data: { status: ScreenStatus.OFFLINE },
+        data: { status: ScreenStatus.OFFLINE, isOfflineCacheMode: false },
       });
       this.heartbeat.emitScreenStatus(binding.workspaceId, {
         screenId: binding.screenId,
         serialNumber: binding.serialNumber,
         status: ScreenStatus.OFFLINE,
         lastSeenAt: new Date().toISOString(),
+        isOfflineCacheMode: false,
       });
     }
+  }
+
+  /**
+   * JWT / dashboard-token players: join `screen:{id}` to receive `player:ticker`
+   * and other screen-targeted events without kiosk `screen:register`.
+   */
+  @SubscribeMessage('player:bind_screen')
+  async handlePlayerBindScreen(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { screenId?: string },
+  ): Promise<void> {
+    const user = this.parseUserFromSocket(client);
+    if (!user) {
+      client.emit('screen:error', { code: 'UNAUTHORIZED' });
+      return;
+    }
+    const screenId =
+      typeof body?.screenId === 'string' ? body.screenId.trim() : '';
+    if (!screenId) {
+      client.emit('screen:error', { code: 'VALIDATION' });
+      return;
+    }
+    const screen = await this.prisma.screen.findFirst({
+      where: { id: screenId },
+      select: { id: true, workspaceId: true },
+    });
+    if (!screen) {
+      client.emit('screen:error', { code: 'SCREEN_NOT_FOUND' });
+      return;
+    }
+    const [actor, membership] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: user.sub },
+        select: { isSuperAdmin: true },
+      }),
+      this.prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: screen.workspaceId,
+            userId: user.sub,
+          },
+        },
+        select: { userId: true },
+      }),
+    ]);
+    const allowed = Boolean(actor?.isSuperAdmin || membership);
+    if (!allowed) {
+      client.emit('screen:error', { code: 'FORBIDDEN_BIND' });
+      return;
+    }
+    await client.join(`screen:${screen.id}`);
+    client.emit('player:bound', { screenId: screen.id });
   }
 
   @SubscribeMessage('screen:register')
@@ -131,6 +192,7 @@ export class RealtimeGateway
       data: {
         status: ScreenStatus.ONLINE,
         lastSeenAt: now,
+        isOfflineCacheMode: false,
       },
     });
 
@@ -139,6 +201,7 @@ export class RealtimeGateway
       serialNumber: screen.serialNumber,
       status: ScreenStatus.ONLINE,
       lastSeenAt: now.toISOString(),
+      isOfflineCacheMode: false,
     });
 
     await client.join(`screen:${screen.id}`);
@@ -149,26 +212,83 @@ export class RealtimeGateway
     });
   }
 
+  /**
+   * Player-reported playback / asset failures (distinct from server-emitted
+   * `screen:error` registration failures).
+   */
+  @SubscribeMessage('screen:error')
+  handleScreenClientErrorReport(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: unknown,
+  ): void {
+    const binding = this.heartbeat.getBinding(client.id);
+    if (!binding) return;
+    const meta =
+      body && typeof body === 'object' && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
+    this.log.warn(
+      `screen playback error screenId=${binding.screenId} serial=${binding.serialNumber} workspaceId=${binding.workspaceId} meta=${JSON.stringify(meta)}`,
+    );
+  }
+
   @SubscribeMessage('screen:heartbeat')
   async handleScreenHeartbeat(
     @ConnectedSocket() client: Socket,
+    @MessageBody() body?: { isOfflineMode?: boolean },
   ): Promise<void> {
     const ok = this.heartbeat.touchHeartbeat(client.id);
     if (!ok) {
       client.emit('screen:error', { code: 'NOT_REGISTERED' });
       return;
     }
-    await this.heartbeat.applyHeartbeatFromSocket(client.id);
+    const isOfflineMode =
+      body &&
+      typeof body === 'object' &&
+      typeof (body as { isOfflineMode?: unknown }).isOfflineMode === 'boolean'
+        ? (body as { isOfflineMode: boolean }).isOfflineMode
+        : false;
+    await this.heartbeat.applyHeartbeatFromSocket(client.id, {
+      isOfflineMode,
+    });
   }
 
   /** Legacy ping — treated as heartbeat for players already registered. */
   @SubscribeMessage('ping')
   async handlePing(@ConnectedSocket() client: Socket): Promise<void> {
     if (this.heartbeat.getBinding(client.id)) {
-      await this.handleScreenHeartbeat(client);
+      await this.handleScreenHeartbeat(client, undefined);
     } else {
       client.emit('pong', { at: new Date().toISOString() });
     }
+  }
+
+  /** Unauthenticated: join `pairing:{sessionId}` after validating poll secret (player TV / kiosk). */
+  @SubscribeMessage('pairing:watch')
+  async handlePairingWatch(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: PairingWatchPayload,
+  ): Promise<void> {
+    const sessionId = payload?.sessionId?.trim();
+    const pollSecret = payload?.pollSecret?.trim();
+    if (!sessionId || !pollSecret) {
+      client.emit('pairing:error', { code: 'VALIDATION' });
+      return;
+    }
+    const row = await this.prisma.screenPairingSession.findFirst({
+      where: {
+        id: sessionId,
+        pollSecret,
+        status: ScreenPairingSessionStatus.PENDING,
+      },
+      select: { id: true, expiresAt: true },
+    });
+    if (!row || row.expiresAt < new Date()) {
+      client.emit('pairing:error', { code: 'NOT_FOUND_OR_EXPIRED' });
+      return;
+    }
+    await client.join(`pairing:${row.id}`);
+    client.emit('pairing:watching', { sessionId: row.id });
   }
 
   @SubscribeMessage('dashboard:subscribe')

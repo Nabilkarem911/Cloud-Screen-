@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { ClientHomeDashboard } from '@/features/dashboard/client-home-dashboard';
-import { OverviewMetrics } from '@/features/dashboard/overview-metrics';
 
 type Props = {
   appTitle: string;
@@ -20,7 +19,7 @@ export function HomeOverview({ appTitle, headline, description }: Props) {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="vc-glass vc-card-surface overflow-hidden rounded-3xl"
+        className="vc-glass vc-card-surface vc-surface-elevated overflow-hidden rounded-3xl"
       >
         <div className="border-b border-border/60 bg-gradient-to-r from-[#0F1729]/12 via-transparent to-[#FF6B00]/10 px-8 py-10 sm:px-10 sm:py-12 dark:border-white/[0.06]">
           <p className="vc-page-kicker">{t('kicker')}</p>
@@ -36,16 +35,6 @@ export function HomeOverview({ appTitle, headline, description }: Props) {
       </motion.section>
 
       <ClientHomeDashboard />
-
-      <section className="space-y-4">
-        <div className="border-t border-border/40 pt-2">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground dark:text-white">
-            {t('currentWorkspaceTitle')}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t('currentWorkspaceSub')}</p>
-        </div>
-        <OverviewMetrics />
-      </section>
     </main>
   );
 }

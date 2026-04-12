@@ -120,7 +120,8 @@ export function CanvasKonvaView({ designWidth, designHeight, layoutData, liveOve
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.min(size.w / designWidth, size.h / designHeight, 4);
+  /** Cover viewport (like object-fit: cover) — no letterboxing on mixed aspect ratios. */
+  const scale = Math.min(Math.max(size.w / designWidth, size.h / designHeight), 4);
   const ox = (size.w - designWidth * scale) / 2;
   const oy = (size.h - designHeight * scale) / 2;
 

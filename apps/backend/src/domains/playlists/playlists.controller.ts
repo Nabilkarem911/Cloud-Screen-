@@ -11,11 +11,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { CurrentUser, type JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/auth/roles.guard';
 import { Roles } from '../../common/auth/roles.decorator';
+import { ClonePlaylistDto } from './dto/clone-playlist.dto';
 import { CreatePlaylistDto } from './dto/create-playlist.dto';
-import { RenamePlaylistDto } from './dto/rename-playlist.dto';
+import { UpdatePlaylistDto } from './dto/update-playlist.dto';
 import { ReplacePlaylistItemsDto } from './dto/replace-playlist-items.dto';
 import { PlaylistsService } from './playlists.service';
 
@@ -44,12 +46,37 @@ export class PlaylistsController {
 
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
   @Patch(':id')
-  rename(
+  update(
     @Param('id') id: string,
     @Query('workspaceId') workspaceId: string,
-    @Body() dto: RenamePlaylistDto,
+    @Body() dto: UpdatePlaylistDto,
   ) {
-    return this.playlistsService.rename(workspaceId, id, dto.name);
+    return this.playlistsService.update(workspaceId, id, dto);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Post(':id/duplicate')
+  duplicate(
+    @Param('id') id: string,
+    @Query('workspaceId') workspaceId: string,
+  ) {
+    return this.playlistsService.duplicateInWorkspace(workspaceId, id);
+  }
+
+  @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
+  @Post(':id/clone-to-workspace')
+  cloneToWorkspace(
+    @Param('id') id: string,
+    @Query('workspaceId') workspaceId: string,
+    @Body() dto: ClonePlaylistDto,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.playlistsService.cloneToWorkspace(
+      user.sub,
+      workspaceId,
+      id,
+      dto.targetWorkspaceId,
+    );
   }
 
   @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.EDITOR)
@@ -68,7 +95,10 @@ export class PlaylistsController {
   async remove(
     @Param('id') id: string,
     @Query('workspaceId') workspaceId: string,
+    @Query('force') force?: string,
   ): Promise<void> {
-    await this.playlistsService.remove(workspaceId, id);
+    await this.playlistsService.remove(workspaceId, id, {
+      force: force === 'true' || force === '1',
+    });
   }
 }

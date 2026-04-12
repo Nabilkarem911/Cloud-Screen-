@@ -1,15 +1,23 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 
-/** Login accepts `admin` / `admin2` as shorthand for seeded accounts. */
+/**
+ * Login accepts shorthand usernames for seeded dev accounts.
+ * `require_tld: false` allows `.local` emails (validator.js rejects them by default).
+ */
 export class LoginDto {
   @Transform(({ value }) => {
-    const v = String(value ?? '').trim().toLowerCase();
-    if (v === 'admin') return 'admin@cloudsignage.local';
-    if (v === 'admin2') return 'admin2@client.local';
-    return String(value ?? '').trim().toLowerCase();
+    const v = String(value ?? '')
+      .trim()
+      .toLowerCase();
+    if (v === 'admin' || v === 'superadmin' || v === 'super')
+      return 'admin@cloudsignage.local';
+    if (v === 'admin2' || v === 'client') return 'admin2@client.local';
+    return String(value ?? '')
+      .trim()
+      .toLowerCase();
   })
-  @IsEmail()
+  @IsEmail({ require_tld: false })
   email!: string;
 
   @IsString()

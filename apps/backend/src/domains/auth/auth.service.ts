@@ -7,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
@@ -15,6 +16,11 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { appendAuditLog } from '../admin/admin-runtime.store';
+import { EmailService } from '../email/email.service';
+import {
+  passwordResetEmail,
+  registerOtpEmail,
+} from '../email/email-templates';
 import { LoginDto } from './dto/login.dto';
 import { RegisterStartDto } from './dto/register-start.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
@@ -42,6 +48,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly email: EmailService,
     @Inject(forwardRef(() => WorkspacesService))
     private readonly workspaces: WorkspacesService,
   ) {
@@ -58,6 +65,12 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new ConflictException('Email already registered');
+    }
+    if (
+      process.env.NODE_ENV === 'production' &&
+      !this.email.isConfigured()
+    ) {
+      throw new ServiceUnavailableException('Email is not configured');
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const code = String(randomInt(100000, 999999));
@@ -78,13 +91,60 @@ export class AuthService {
         verificationCodeExpiresAt: expires,
       },
     });
-    // Placeholder: real app sends email via SES/SendGrid
-    if (process.env.NODE_ENV !== 'production') {
+    if (this.email.isConfigured()) {
+      const tpl = registerOtpEmail({ code });
+      await this.email.sendMail({
+        to: email,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
+    } else if (process.env.NODE_ENV !== 'production') {
       this.logger.log(`[Register OTP] ${email} code=${code}`);
     } else {
-      this.logger.log(`[Register OTP] verification code sent to ${email}`);
+      this.logger.error(
+        `[Register OTP] no provider in production for ${email}`,
+      );
     }
     return { ok: true, message: 'Verification code sent.', email };
+  }
+
+  /**
+   * Re-sends the registration OTP for an unverified account. Always returns a generic success
+   * when the email is unknown or already verified (avoid account enumeration).
+   */
+  async registerResend(emailRaw: string) {
+    const email = emailRaw.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || user.emailVerified) {
+      return { ok: true, message: 'If an account needs verification, a new code was sent.' };
+    }
+    const code = String(randomInt(100000, 999999));
+    const otpHash = await bcrypt.hash(code, 10);
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationCode: otpHash,
+        verificationCodeExpiresAt: expires,
+      },
+    });
+    if (this.email.isConfigured()) {
+      const tpl = registerOtpEmail({ code });
+      await this.email.sendMail({
+        to: email,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
+    } else if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`[Register OTP resend] ${email} code=${code}`);
+    } else {
+      this.logger.error(
+        `[Register OTP resend] no provider in production for ${email}`,
+      );
+    }
+    return { ok: true, message: 'Verification code sent.' };
   }
 
   async registerVerify(dto: RegisterVerifyDto) {
@@ -155,12 +215,31 @@ export class AuthService {
           passwordResetExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
         },
       });
-      if (process.env.NODE_ENV !== 'production') {
+      const prod = process.env.NODE_ENV === 'production';
+      const origin =
+        this.configService.get<string>('FRONTEND_ORIGIN')?.trim() ||
+        'http://localhost:3000';
+      const locale = (user.locale || 'en').split('-')[0] || 'en';
+      const resetUrl = `${origin.replace(/\/$/, '')}/${locale}/forgot-password?${new URLSearchParams({ email, token: raw }).toString()}`;
+      if (prod && !this.email.isConfigured()) {
+        this.logger.error(
+          `[Password reset] Email not configured; cannot send reset to ${email}`,
+        );
+      } else if (this.email.isConfigured()) {
+        const tpl = passwordResetEmail({ resetUrl });
+        await this.email.sendMail({
+          to: email,
+          subject: tpl.subject,
+          html: tpl.html,
+          text: tpl.text,
+        });
+        if (!prod) {
+          this.logger.log(`[Password reset] email sent to ${email}`);
+        }
+      } else if (!prod) {
         this.logger.log(
           `[Password reset] ${email} resetToken=${raw} (use with POST /auth/reset-password)`,
         );
-      } else {
-        this.logger.log(`[Password reset] flow initiated for ${email}`);
       }
     }
     return {
@@ -276,24 +355,35 @@ export class AuthService {
   }
 
   /**
-   * Dev helper: authenticate as the first active user (same response shape as login).
+   * Dev helper: authenticate as the seeded super admin when present, else the first
+   * eligible user (same response shape as login).
    */
   async devLoginAsFirstUser() {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        isActive: true,
-        OR: [{ emailVerified: true }, { isSuperAdmin: true }],
-      },
+    const select = {
+      id: true,
+      email: true,
+      fullName: true,
+      locale: true,
+      isSuperAdmin: true,
+      platformStaffRole: true,
+    } as const;
+
+    const superUser = await this.prisma.user.findFirst({
+      where: { isActive: true, isSuperAdmin: true },
       orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        locale: true,
-        isSuperAdmin: true,
-        platformStaffRole: true,
-      },
+      select,
     });
+
+    const user =
+      superUser ??
+      (await this.prisma.user.findFirst({
+        where: {
+          isActive: true,
+          OR: [{ emailVerified: true }, { isSuperAdmin: true }],
+        },
+        orderBy: { createdAt: 'asc' },
+        select,
+      }));
     if (!user) {
       throw new BadRequestException(
         'No active users in the database. Register an account first.',
@@ -502,7 +592,9 @@ export class AuthService {
         memberships: {
           select: {
             role: true,
-            workspace: { select: { id: true, name: true, slug: true } },
+            workspace: {
+              select: { id: true, name: true, slug: true, isPaused: true },
+            },
           },
         },
       },
@@ -519,7 +611,7 @@ export class AuthService {
     if (isSuperAdmin) {
       const all = await this.prisma.workspace.findMany({
         orderBy: { createdAt: 'asc' },
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, isPaused: true },
       });
       return {
         id: user.id,
@@ -555,12 +647,18 @@ export class AuthService {
     userId: string,
     isSuperAdmin: boolean,
   ): Promise<
-    Array<{ id: string; name: string; slug: string; role: string }>
+    Array<{
+      id: string;
+      name: string;
+      slug: string;
+      isPaused: boolean;
+      role: string;
+    }>
   > {
     if (isSuperAdmin) {
       const all = await this.prisma.workspace.findMany({
         orderBy: { createdAt: 'asc' },
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, isPaused: true },
       });
       return all.map((w) => ({ ...w, role: 'OWNER' }));
     }
@@ -569,7 +667,7 @@ export class AuthService {
       select: {
         role: true,
         workspace: {
-          select: { id: true, name: true, slug: true },
+          select: { id: true, name: true, slug: true, isPaused: true },
         },
       },
     });

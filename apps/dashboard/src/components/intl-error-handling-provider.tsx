@@ -2,6 +2,7 @@
 
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocaleAwareFallbackString } from '@/i18n/fallback';
+import { devError } from '@/lib/dev-log';
 
 type Props = {
   children: React.ReactNode;
@@ -19,11 +20,7 @@ export function IntlErrorHandlingProvider({ children, locale, messages }: Props)
       locale={locale}
       messages={messages}
       onError={(error) => {
-        // Keep UI resilient in production; only log in development.
-        if (process.env.NODE_ENV === 'development') {
-          // eslint-disable-next-line no-console
-          console.error('[i18n]', error);
-        }
+        devError('[i18n]', error);
       }}
       getMessageFallback={({ namespace, key }) =>
         getLocaleAwareFallbackString(locale, namespace, key)

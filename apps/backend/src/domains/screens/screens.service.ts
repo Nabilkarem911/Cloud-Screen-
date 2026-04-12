@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ScreenStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PlaylistsService } from '../playlists/playlists.service';
@@ -19,8 +23,24 @@ export class ScreensService {
     private readonly scheduling: SchedulingService,
   ) {}
 
+  /** Blocks creation when the workspace already has `subscription.screenLimit` screens. */
+  async assertWithinScreenLimit(workspaceId: string): Promise<void> {
+    const sub = await this.prisma.subscription.findUnique({
+      where: { workspaceId },
+      select: { screenLimit: true },
+    });
+    const limit = sub?.screenLimit ?? 25;
+    const count = await this.prisma.screen.count({ where: { workspaceId } });
+    if (count >= limit) {
+      throw new BadRequestException(`SCREEN_LIMIT_REACHED:${limit}`);
+    }
+  }
+
   async create(dto: CreateScreenDto) {
-    let playlistGroupId: string | null | undefined = dto.playlistGroupId ?? undefined;
+    await this.assertWithinScreenLimit(dto.workspaceId);
+
+    let playlistGroupId: string | null | undefined =
+      dto.playlistGroupId ?? undefined;
     if (playlistGroupId === '') playlistGroupId = null;
     if (playlistGroupId) {
       const pl = await this.prisma.playlist.findFirst({
@@ -36,6 +56,15 @@ export class ScreensService {
         serialNumber: dto.serialNumber,
         location: dto.location,
         status: ScreenStatus.OFFLINE,
+        ...(dto.playerPlatform !== undefined
+          ? { playerPlatform: dto.playerPlatform }
+          : {}),
+        ...(dto.resolutionWidth !== undefined
+          ? { resolutionWidth: dto.resolutionWidth }
+          : {}),
+        ...(dto.resolutionHeight !== undefined
+          ? { resolutionHeight: dto.resolutionHeight }
+          : {}),
         ...(playlistGroupId !== undefined ? { playlistGroupId } : {}),
       },
       select: this.screenSelect,
@@ -122,7 +151,9 @@ export class ScreensService {
       overridePlaylistId = dto.playlistId;
       overrideExpiresAt = new Date(Date.now() + durationMin * 60_000);
     } else {
-      throw new BadRequestException('playlistId is required, or pass null to clear');
+      throw new BadRequestException(
+        'playlistId is required, or pass null to clear',
+      );
     }
 
     const updated = await this.prisma.screen.update({
@@ -137,6 +168,17 @@ export class ScreensService {
 
   async update(workspaceId: string, id: string, dto: UpdateScreenDto) {
     await this.getById(workspaceId, id);
+    if (dto.activePlaylistId !== undefined) {
+      if (dto.activePlaylistId === null || dto.activePlaylistId === '') {
+        /* clear */
+      } else {
+        const pl = await this.prisma.playlist.findFirst({
+          where: { id: dto.activePlaylistId, workspaceId },
+        });
+        if (!pl)
+          throw new BadRequestException('Playlist not found in workspace');
+      }
+    }
     if (dto.playlistGroupId !== undefined) {
       if (dto.playlistGroupId === null || dto.playlistGroupId === '') {
         /* clear */
@@ -144,7 +186,8 @@ export class ScreensService {
         const pl = await this.prisma.playlist.findFirst({
           where: { id: dto.playlistGroupId, workspaceId },
         });
-        if (!pl) throw new BadRequestException('Playlist not found in workspace');
+        if (!pl)
+          throw new BadRequestException('Playlist not found in workspace');
       }
     }
 
@@ -167,6 +210,15 @@ export class ScreensService {
                   ? dto.playlistGroupId
                   : null,
             }
+          : {}),
+        ...(dto.playerPlatform !== undefined
+          ? { playerPlatform: dto.playerPlatform }
+          : {}),
+        ...(dto.resolutionWidth !== undefined
+          ? { resolutionWidth: dto.resolutionWidth }
+          : {}),
+        ...(dto.resolutionHeight !== undefined
+          ? { resolutionHeight: dto.resolutionHeight }
           : {}),
       },
       select: this.screenSelect,
@@ -191,7 +243,11 @@ export class ScreensService {
     });
     if (!screen) throw new NotFoundException('Screen not found');
 
-    const base = { command: dto.command, screenId: screen.id, at: new Date().toISOString() };
+    const base = {
+      command: dto.command,
+      screenId: screen.id,
+      at: new Date().toISOString(),
+    };
 
     if (dto.command === 'identify') {
       this.heartbeat.emitRemoteCommand(screen.id, {
@@ -227,6 +283,7 @@ export class ScreensService {
     status: true,
     location: true,
     lastSeenAt: true,
+    isOfflineCacheMode: true,
     playlistGroupId: true,
     playlistGroup: {
       select: { id: true, name: true },
@@ -238,6 +295,9 @@ export class ScreensService {
     overridePlaylistId: true,
     overrideExpiresAt: true,
     playerTicker: true,
+    playerPlatform: true,
+    resolutionWidth: true,
+    resolutionHeight: true,
     createdAt: true,
     updatedAt: true,
   } satisfies Prisma.ScreenSelect;

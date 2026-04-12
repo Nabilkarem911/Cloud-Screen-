@@ -3,6 +3,7 @@ import { hasLocale } from 'next-intl';
 import { headers } from 'next/headers';
 import { getLocaleAwareFallbackString } from './fallback';
 import { routing } from './routing';
+import { devWarn } from '@/lib/dev-log';
 
 export default getRequestConfig(async ({ requestLocale }) => {
   // When middleware fails to provide requestLocale, try to recover from headers.
@@ -26,13 +27,13 @@ export default getRequestConfig(async ({ requestLocale }) => {
         ? recoveredFromHeader
       : routing.defaultLocale;
 
-  if (process.env.NODE_ENV === 'development' && requested == null) {
-    // eslint-disable-next-line no-console
-    console.warn('[i18n] requestLocale missing; resolved locale:', locale);
+  if (requested == null) {
+    devWarn('[i18n] requestLocale missing; resolved locale:', locale);
   }
 
   return {
     locale,
+    timeZone: 'UTC',
     messages: (await import(`./messages/${locale}.json`)).default,
     getMessageFallback({ namespace, key }) {
       return getLocaleAwareFallbackString(locale, namespace, key);

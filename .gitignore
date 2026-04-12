@@ -2,6 +2,7 @@ node_modules/
 uploads/
 .env
 apps/backend/.env
+apps/backend/.data/
 apps/dashboard/.env.local
 apps/player/.env.local
 
@@ -9,6 +10,7 @@ apps/player/.env.local
 apps/dashboard/.next/
 apps/backend/dist/
 apps/player/.next/
+apps/marketing/.next/
 .turbo/
 *.tsbuildinfo
 coverage/

@@ -24,11 +24,24 @@ body {
   animation: eclipse-marquee 40s linear infinite;
 }
 
+.eclipse-marquee.eclipse-marquee-rtl {
+  animation-name: eclipse-marquee-rtl;
+}
+
 @keyframes eclipse-marquee {
   from {
     transform: translateX(0);
   }
   to {
     transform: translateX(-50%);
+  }
+}
+
+@keyframes eclipse-marquee-rtl {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
   }
 }

@@ -174,6 +174,12 @@ export function AdminOverview({ locale }: Props) {
       ) : null}
 
       {stats ? (
+        <p className="rounded-2xl border border-dashed border-amber-500/35 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-950 dark:text-amber-100/90">
+          {t('revenueDisclaimer')}
+        </p>
+      ) : null}
+
+      {stats ? (
         <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
           {metricsCards.map((c, i) => (
             <Link

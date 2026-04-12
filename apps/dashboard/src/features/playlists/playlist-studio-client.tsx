@@ -9,6 +9,8 @@ import {
 } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
 import {
+  ChevronDown,
+  ChevronUp,
   Film,
   GripVertical,
   ImageIcon,
@@ -26,7 +28,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiFetch } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace-context';
-import { DemoDataButton } from '@/features/workspace/demo-data-button';
 import type { MediaItem } from '@/features/media/media-library-client';
 
 type PlaylistSummary = {
@@ -221,6 +222,18 @@ export function PlaylistStudioClient() {
     setRows((prev) => prev.filter((r) => r.clientId !== clientId));
   };
 
+  const moveRow = (index: number, delta: -1 | 1) => {
+    setRows((prev) => {
+      const next = [...prev];
+      const j = index + delta;
+      if (j < 0 || j >= next.length) return prev;
+      const tmp = next[index];
+      next[index] = next[j]!;
+      next[j] = tmp!;
+      return next;
+    });
+  };
+
   const savePlaylist = async () => {
     if (!workspaceId || !playlistId) return;
     setSaving(true);
@@ -249,6 +262,7 @@ export function PlaylistStudioClient() {
       );
       if (!res.ok) throw new Error('save failed');
       toast.success(t('playlistSaved'));
+      bumpWorkspaceDataEpoch();
       await loadPlaylistDetail(playlistId);
     } catch {
       toast.error(t('saveFailed'));
@@ -263,22 +277,6 @@ export function PlaylistStudioClient() {
 
   return (
     <div className="space-y-10">
-      {!loading && playlists.length === 0 ? (
-        <div className="flex flex-col gap-4 rounded-3xl border border-dashed border-[#0F1729]/25 bg-[#0F1729]/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-medium text-foreground">{t('emptyTitle')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('emptyDescription')}
-            </p>
-          </div>
-          <DemoDataButton
-            onDone={async () => {
-              await loadPlaylists();
-              await loadLibrary();
-            }}
-          />
-        </div>
-      ) : null}
       <motion.div
         className="vc-glass vc-card-surface rounded-3xl p-6 sm:p-8"
         initial={{ opacity: 0, y: 8 }}
@@ -518,7 +516,15 @@ export function PlaylistStudioClient() {
                                   {row.kind === 'media' ? t('media') : t('canvas')}
                                 </p>
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Label className="text-xs">{t('durationSec')}</Label>
+                                  <div className="flex flex-col gap-1">
+                                    <Label className="text-xs">{t('durationSec')}</Label>
+                                    {row.kind === 'media' &&
+                                    row.media.mimeType.startsWith('image/') ? (
+                                      <p className="max-w-[14rem] text-[11px] leading-snug text-muted-foreground">
+                                        {t('imageDurationHint')}
+                                      </p>
+                                    ) : null}
+                                  </div>
                                   <Input
                                     type="number"
                                     min={1}
@@ -528,16 +534,40 @@ export function PlaylistStudioClient() {
                                       updateDuration(row.clientId, Number(e.target.value) || 1)
                                     }
                                   />
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-500 hover:bg-red-500/10 hover:text-red-600"
-                                    onClick={() => removeRow(row.clientId)}
-                                  >
-                                    <Trash2 className="mr-1 h-4 w-4" />
-                                    {t('delete')}
-                                  </Button>
+                                  <div className="ms-auto flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-9 w-9 shrink-0 rounded-lg"
+                                      disabled={index === 0}
+                                      title={t('moveUp')}
+                                      onClick={() => moveRow(index, -1)}
+                                    >
+                                      <ChevronUp className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-9 w-9 shrink-0 rounded-lg"
+                                      disabled={index >= rows.length - 1}
+                                      title={t('moveDown')}
+                                      onClick={() => moveRow(index, 1)}
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                                      onClick={() => removeRow(row.clientId)}
+                                    >
+                                      <Trash2 className="mr-1 h-4 w-4" />
+                                      {t('delete')}
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             </div>

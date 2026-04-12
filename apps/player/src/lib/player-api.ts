@@ -1,10 +1,29 @@
 import type { BootstrapResponse } from '@/types/player-playlist';
 import { getApiBaseUrl } from '@/lib/auth-session';
 
+export type StartPairingSessionResponse = {
+  sessionId: string;
+  pairingCode: string;
+  pollSecret: string;
+  expiresAt: string;
+};
+
+export type PollPairingSessionResponse =
+  | { status: 'pending'; expiresAt: string }
+  | {
+      status: 'complete';
+      screenId?: string | null;
+      workspaceId?: string | null;
+      serialNumber: string;
+    }
+  | { status: 'expired'; expiresAt: string }
+  | { status: 'cancelled'; expiresAt: string };
+
 export type WorkspaceBootstrapResponse = {
   screenId: string;
   serialNumber: string;
   workspaceId: string;
+  workspaceName?: string | null;
   ticker: string | null;
   playlist: BootstrapResponse['playlist'];
 };
@@ -54,4 +73,48 @@ export async function fetchWorkspaceBootstrap(
     throw new Error(text || `Workspace bootstrap failed (${res.status})`);
   }
   return res.json() as Promise<WorkspaceBootstrapResponse>;
+}
+
+export async function startPlayerPairingSession(body?: {
+  playerPlatform?: 'ANDROID' | 'TIZEN' | 'WEBOS' | 'WEB';
+  resolutionWidth?: number;
+  resolutionHeight?: number;
+  /** When set with `NEXT_PUBLIC_PLAYER_HEARTBEAT_SECRET`, notifies this workspace (`pairing:started`). */
+  workspaceId?: string;
+}): Promise<StartPairingSessionResponse> {
+  const secret = process.env.NEXT_PUBLIC_PLAYER_HEARTBEAT_SECRET?.trim();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (secret) headers['x-player-secret'] = secret;
+  const res = await fetch(`${getApiBaseUrl()}/player/pairing/sessions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body ?? {}),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Pairing start failed (${res.status})`);
+  }
+  return res.json() as Promise<StartPairingSessionResponse>;
+}
+
+export async function pollPlayerPairingSession(
+  sessionId: string,
+  pollSecret: string,
+): Promise<PollPairingSessionResponse> {
+  const url = new URL(
+    `${getApiBaseUrl()}/player/pairing/sessions/${encodeURIComponent(sessionId)}`,
+  );
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'x-pairing-poll-secret': pollSecret,
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Pairing poll failed (${res.status})`);
+  }
+  return res.json() as Promise<PollPairingSessionResponse>;
 }

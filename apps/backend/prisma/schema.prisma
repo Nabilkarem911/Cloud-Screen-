@@ -95,6 +95,36 @@ enum SubscriptionStatus {
 
 }
 
+
+
+/// Physical or runtime player stack (blueprint: Android / Tizen / webOS / web).
+
+enum PlayerPlatform {
+
+  ANDROID
+
+  TIZEN
+
+  WEBOS
+
+  WEB
+
+}
+
+
+
+enum ScreenPairingSessionStatus {
+
+  PENDING
+
+  COMPLETE
+
+  EXPIRED
+
+  CANCELLED
+
+}
+
 /// Per-customer (tenant user) subscription tier for admin CRM — distinct from workspace Subscription.
 enum UserSubscriptionStatus {
 
@@ -199,6 +229,16 @@ model PaymentRecord {
 
   paidAt       DateTime?
 
+  /// e.g. stripe, moyasar
+
+  provider     String?
+
+  /// Provider event / intent id for idempotency
+
+  externalId   String?  @unique
+
+  metadata     Json?
+
   createdAt    DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -219,6 +259,9 @@ model Workspace {
 
   timezone      String            @default("UTC")
 
+  /// When true, player bootstrap rejects playback for this workspace (dashboard still works).
+  isPaused      Boolean           @default(false)
+
   createdAt     DateTime          @default(now())
 
   updatedAt     DateTime          @updatedAt
@@ -230,6 +273,11 @@ model Workspace {
   canvases      Canvas[]
 
   medias        Media[]
+  mediaFolders  MediaFolder[]
+  /// Deprecated: not used by the app. Displays pair via ScreenPairingSession (6-digit flow) only.
+  pairingCodes  WorkspacePairingCode[]
+
+  screenPairingSessions ScreenPairingSession[]
 
   playlists     Playlist[]
 
@@ -281,17 +329,28 @@ model Screen {
 
   lastSeenAt       DateTime?
 
+  /// Last player heartbeat reported running from offline cache (API unreachable).
+  isOfflineCacheMode Boolean @default(false)
+
   activePlaylistId String?
 
   /// Bottom marquee / ticker text pushed to the player HUD
 
   playerTicker     String?
 
+  playerPlatform   PlayerPlatform @default(WEB)
+
+  resolutionWidth  Int            @default(1920)
+
+  resolutionHeight Int            @default(1080)
+
   createdAt        DateTime     @default(now())
 
   updatedAt        DateTime     @updatedAt
 
   workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  pairingSession     ScreenPairingSession?
 
   /// Organizational bucket: screens belong to this playlist for branch UI (not necessarily active playback).
   playlistGroupId  String?
@@ -308,6 +367,64 @@ model Screen {
   schedules Schedule[]
 
   @@index([workspaceId, playlistGroupId])
+
+}
+
+
+
+/// Ephemeral 6-digit code + poll secret for dashboard ↔ player linking (v2). Legacy kiosk flow unchanged.
+
+model ScreenPairingSession {
+
+  id          String   @id @default(cuid())
+
+  code        String   @unique
+
+  pollSecret  String
+
+  status      ScreenPairingSessionStatus @default(PENDING)
+
+  workspaceId String?
+
+  screenId    String?  @unique
+
+  playerPlatform   PlayerPlatform @default(WEB)
+
+  resolutionWidth  Int            @default(1920)
+
+  resolutionHeight Int            @default(1080)
+
+  expiresAt   DateTime
+
+  createdAt   DateTime @default(now())
+
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  screen    Screen?    @relation(fields: [screenId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+
+  @@index([workspaceId, status])
+
+}
+
+
+
+/// Idempotent payment / webhook processing (Stripe event id, etc.)
+
+model ProcessedWebhookEvent {
+
+  id          String   @id @default(cuid())
+
+  provider    String
+
+  externalId  String
+
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, externalId])
 
 }
 
@@ -372,19 +489,51 @@ model Media {
   sizeBytes     Int
 
   relativePath  String
+  folderId      String?
 
   createdAt     DateTime       @default(now())
 
   updatedAt     DateTime       @updatedAt
 
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder        MediaFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   playlistItems PlaylistItem[]
 
 
 
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, folderId, createdAt])
 
+}
+
+model MediaFolder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  medias    Media[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt])
+}
+
+/// Deprecated: legacy table kept for DB compatibility. Pairing is `ScreenPairingSession` only.
+model WorkspacePairingCode {
+  id          String   @id @default(cuid())
+  workspaceId String
+  code        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, isActive, createdAt])
 }
 
 
@@ -515,11 +664,19 @@ model Subscription {
 
   screenLimit      Int                @default(1)
 
+  /// Null = no workspace storage quota (legacy). When set, media uploads should sum to this cap.
+
+  storageLimitBytes Int?
+
   startedAt        DateTime           @default(now())
 
   currentPeriodEnd DateTime?
 
   canceledAt       DateTime?
+
+  /// Set after Stripe Checkout / subscription webhooks (Billing Portal).
+  stripeCustomerId     String?  @unique
+  stripeSubscriptionId String?  @unique
 
   createdAt        DateTime           @default(now())
 

@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/dist
+.git
+.github
+**/*.md
+.env
+.env.*
+!.env.example
+**/coverage
+**/.turbo
+**/terminals
+apps/backend/.data

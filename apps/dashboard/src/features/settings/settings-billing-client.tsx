@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -12,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { apiFetch } from '@/features/auth/session';
+import { useWorkspace } from '@/features/workspace/workspace-context';
 
 type Payment = {
   id: string;
@@ -43,8 +45,11 @@ function money(cents: number, currency: string) {
 export function SettingsBillingClient() {
   const t = useTranslations('settingsBillingClient');
   const locale = useLocale();
+  const { workspaceId, workspaceDataEpoch } = useWorkspace();
   const [data, setData] = useState<BillingPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [portalAvailable, setPortalAvailable] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -58,6 +63,47 @@ export function SettingsBillingClient() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      if (!workspaceId) {
+        setPortalAvailable(false);
+        return;
+      }
+      const res = await apiFetch(
+        `/subscriptions/current?workspaceId=${encodeURIComponent(workspaceId)}`,
+      );
+      if (!res.ok) {
+        setPortalAvailable(false);
+        return;
+      }
+      const sub = (await res.json()) as { billingPortalAvailable?: boolean };
+      setPortalAvailable(Boolean(sub.billingPortalAvailable));
+    })();
+  }, [workspaceId, workspaceDataEpoch]);
+
+  const openBillingPortal = useCallback(async () => {
+    if (!workspaceId) {
+      toast.error(t('selectWorkspace'));
+      return;
+    }
+    setPortalBusy(true);
+    try {
+      const res = await apiFetch('/stripe/portal', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, locale }),
+      });
+      if (!res.ok) {
+        toast.error(t('portalFailed'));
+        return;
+      }
+      const body = (await res.json()) as { url?: string | null };
+      if (body.url) window.location.href = body.url;
+      else toast.error(t('portalFailed'));
+    } finally {
+      setPortalBusy(false);
+    }
+  }, [workspaceId, locale, t]);
 
   if (loading) return <p className="text-sm text-muted-foreground">{t('loading')}</p>;
 
@@ -100,6 +146,19 @@ export function SettingsBillingClient() {
             </dd>
           </div>
         </dl>
+        {portalAvailable ? (
+          <div className="mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-2xl"
+              disabled={portalBusy}
+              onClick={() => void openBillingPortal()}
+            >
+              {portalBusy ? t('openingPortal') : t('manageBilling')}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div className="vc-card-surface overflow-hidden rounded-3xl border border-[#0F1729]/15">

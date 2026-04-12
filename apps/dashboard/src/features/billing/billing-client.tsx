@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, CreditCard, Sparkles, Zap } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace-context';
@@ -17,14 +18,18 @@ type SubPayload = {
   screenLimit: number;
   currentPeriodEnd: string | null;
   startedAt: string;
+  billingPortalAvailable?: boolean;
 };
 
 export function BillingClient() {
   const t = useTranslations('billingClient');
   const locale = useLocale();
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspaceDataEpoch } = useWorkspace();
   const [sub, setSub] = useState<SubPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const allowMockBilling =
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_BILLING === 'true';
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
@@ -42,7 +47,75 @@ export function BillingClient() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, workspaceDataEpoch]);
+
+  const applyMockPlan = useCallback(
+    async (next: 'FREE' | 'PRO') => {
+      if (!workspaceId) return;
+      setSavingPlan(true);
+      const res = await apiFetch(
+        `/subscriptions/mock-plan?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { method: 'PATCH', body: JSON.stringify({ plan: next }) },
+      );
+      if (!res.ok) {
+        toast.error(t('mockPlanSaveFailed'));
+        setSavingPlan(false);
+        return;
+      }
+      toast.success(
+        next === 'PRO' ? t('mockPlanUpgraded') : t('mockPlanDowngraded'),
+      );
+      await load();
+      setSavingPlan(false);
+    },
+    [workspaceId, t, load],
+  );
+
+  const openBillingPortal = useCallback(async () => {
+    if (!workspaceId) return;
+    setSavingPlan(true);
+    try {
+      const res = await apiFetch('/stripe/portal', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, locale }),
+      });
+      if (!res.ok) {
+        toast.error(t('portalFailed'));
+        return;
+      }
+      const data = (await res.json()) as { url?: string | null };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      toast.error(t('portalFailed'));
+    } finally {
+      setSavingPlan(false);
+    }
+  }, [workspaceId, locale, t]);
+
+  const startStripeCheckout = useCallback(async () => {
+    if (!workspaceId) return;
+    setSavingPlan(true);
+    try {
+      const res = await apiFetch('/stripe/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, plan: 'PRO' }),
+      });
+      if (!res.ok) {
+        toast.error(t('stripeCheckoutFailed'));
+        return;
+      }
+      const data = (await res.json()) as { url: string | null };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      toast.error(t('stripeCheckoutFailed'));
+    } finally {
+      setSavingPlan(false);
+    }
+  }, [workspaceId, t]);
 
   if (!workspaceId) {
     return (
@@ -68,16 +141,29 @@ export function BillingClient() {
               {t('description')}
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-muted/30 px-5 py-4">
-            <CreditCard className="h-8 w-8 text-[#0F1729]" />
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('currentPlan')}
-              </p>
-              <p className="font-mono-nums text-xs text-muted-foreground">
-                {loading ? '…' : sub?.status ?? t('dash')}
-              </p>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-muted/30 px-5 py-4">
+              <CreditCard className="h-8 w-8 text-[#0F1729]" />
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('currentPlan')}
+                </p>
+                <p className="font-mono-nums text-xs text-muted-foreground">
+                  {loading ? '…' : sub?.status ?? t('dash')}
+                </p>
+              </div>
             </div>
+            {!loading && sub?.billingPortalAvailable ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 shrink-0 rounded-2xl border-border/80"
+                disabled={savingPlan}
+                onClick={() => void openBillingPortal()}
+              >
+                {savingPlan ? t('openingPortal') : t('manageBilling')}
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -115,14 +201,25 @@ export function BillingClient() {
                 </li>
               ))}
             </ul>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-8 w-full rounded-2xl border-[#0F1729]/20"
-              disabled
-            >
-              {t('stripeSoon')}
-            </Button>
+            {!isPro ? (
+              <p className="mt-8 text-center text-sm text-muted-foreground">
+                {t('currentFreePlan')}
+              </p>
+            ) : allowMockBilling ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-8 w-full rounded-2xl border-[#0F1729]/20"
+                disabled={savingPlan}
+                onClick={() => void applyMockPlan('FREE')}
+              >
+                {t('switchToFree')}
+              </Button>
+            ) : (
+              <p className="mt-8 text-center text-sm text-muted-foreground">
+                {t('downgradeViaStripePortal')}
+              </p>
+            )}
           </div>
 
           <div
@@ -163,13 +260,27 @@ export function BillingClient() {
                 </li>
               ))}
             </ul>
-            <Button
-              type="button"
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-[#FF6B00] to-amber-500 font-semibold text-amber-950 shadow-lg hover:opacity-95"
-              disabled
-            >
-              {t('upgradePlaceholder')}
-            </Button>
+            <div className="mt-8 flex flex-col gap-3">
+              <Button
+                type="button"
+                className="w-full rounded-2xl bg-gradient-to-r from-[#FF6B00] to-amber-500 font-semibold text-amber-950 shadow-lg hover:opacity-95"
+                disabled={savingPlan || isPro}
+                onClick={() => void startStripeCheckout()}
+              >
+                {savingPlan ? t('redirectingToStripe') : t('subscribeWithCard')}
+              </Button>
+              {allowMockBilling ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-2xl border-dashed border-[#FF6B00]/40"
+                  disabled={savingPlan || isPro}
+                  onClick={() => void applyMockPlan('PRO')}
+                >
+                  {t('demoUpgradePro')}
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
 

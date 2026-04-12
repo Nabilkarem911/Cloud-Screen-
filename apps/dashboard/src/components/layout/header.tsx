@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { ArrowLeft, Menu, X } from 'lucide-react';
@@ -23,6 +24,8 @@ type ShellHeaderProps = {
   mobileNavOpen: boolean;
   onToggleMobileNav: () => void;
   showWorkspaceSwitcher: boolean;
+  /** Branch tools etc.: beside page title on desktop; extra row on small screens. */
+  headerInset?: ReactNode;
 };
 
 export function ShellHeader({
@@ -37,6 +40,7 @@ export function ShellHeader({
   mobileNavOpen,
   onToggleMobileNav,
   showWorkspaceSwitcher,
+  headerInset,
 }: ShellHeaderProps) {
   const t = useTranslations('nav');
 
@@ -61,7 +65,8 @@ export function ShellHeader({
   const titleBlock = (
     <div
       className={cn(
-        'min-w-0 flex flex-1 flex-col justify-center',
+        'min-w-0 flex flex-col justify-center',
+        headerInset ? 'shrink-0' : 'flex-1',
         rtl ? 'items-end text-right' : 'items-start text-left',
       )}
     >
@@ -78,6 +83,7 @@ export function ShellHeader({
       <p
         className={cn(
           'shell-header-title w-full truncate text-[15px] font-bold leading-tight tracking-tight sm:text-[17px]',
+          headerInset && 'max-w-[10rem] sm:max-w-[14rem] lg:max-w-[18rem]',
           'text-[#1B254B] dark:text-white',
           'transition-colors',
         )}
@@ -132,22 +138,19 @@ export function ShellHeader({
 
         {/* Desktop title row only. Mobile/tablet header hides page title by request. */}
         <div
+          dir={rtl ? 'rtl' : 'ltr'}
           className={cn(
             'hidden min-w-0 flex-1 flex-row items-center gap-2 sm:gap-3 lg:flex',
-            rtl ? 'justify-start' : 'justify-end',
+            headerInset ? 'min-w-0 justify-start' : rtl ? 'justify-start' : 'justify-end',
           )}
         >
-          {rtl ? (
-            <>
-              {titleBlock}
-              {backBtn}
-            </>
-          ) : (
-            <>
-              {backBtn}
-              {titleBlock}
-            </>
-          )}
+          {backBtn}
+          {titleBlock}
+          {headerInset ? (
+            <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1">
+              {headerInset}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center">
@@ -156,6 +159,16 @@ export function ShellHeader({
 
         {desktopActions}
       </div>
+      {headerInset ? (
+        <div
+          dir={rtl ? 'rtl' : 'ltr'}
+          className="border-b border-[#FF6B00]/10 bg-background/40 px-3 py-2 backdrop-blur-sm supports-[backdrop-filter]:bg-white/[0.03] dark:border-white/10 dark:supports-[backdrop-filter]:bg-[rgb(27_37_75_/0.12)] lg:hidden"
+        >
+          <div className="mx-auto flex w-full max-w-[1600px] justify-center overflow-x-auto sm:px-3">
+            {headerInset}
+          </div>
+        </div>
+      ) : null}
       <div
         className="pointer-events-none h-px w-full shrink-0 bg-[#FF6B00] shadow-[0_0_10px_#FF6B00]"
         aria-hidden

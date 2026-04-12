@@ -10,6 +10,7 @@ type Props = {
 export default async function LoginPage({ params }: Props) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'auth' });
+  const tLegal = await getTranslations({ locale, namespace: 'legal' });
 
   return (
     <div className="relative z-[1] grid min-h-[100dvh] overflow-hidden bg-transparent lg:grid-cols-2">
@@ -37,6 +38,21 @@ export default async function LoginPage({ params }: Props) {
           <p className="mt-10 text-center text-sm text-white/45">
             <Link href={`/${locale}/register`} className="font-medium text-[#FF6B00]/90 hover:underline">
               {t('registerTitle')}
+            </Link>
+          </p>
+          <p className="mt-4 text-center text-xs text-white/35">
+            <Link
+              href={`/${locale}/privacy`}
+              className="font-medium text-white/55 underline-offset-4 hover:text-white/80 hover:underline"
+            >
+              {tLegal('privacyLink')}
+            </Link>
+            <span className="mx-2 text-white/25">·</span>
+            <Link
+              href={`/${locale}/terms`}
+              className="font-medium text-white/55 underline-offset-4 hover:text-white/80 hover:underline"
+            >
+              {tLegal('termsLink')}
             </Link>
           </p>
         </div>

@@ -1,3 +1,5 @@
+import { devWarn } from '@/lib/dev-log';
+
 const CACHE_NAME = 'cloudsignage-player-v1';
 
 /** Maps canonical media URL → object URL (deduped until cleared). */
@@ -49,8 +51,8 @@ export async function warmMediaUrls(urls: string[]): Promise<void> {
       try {
         const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
         if (res.ok) await cache.put(url, res.clone());
-      } catch {
-        // network error — will retry on next warm or on playback resolve
+      } catch (err) {
+        devWarn('[media-cache] Prefetch failed', url, err);
       }
     }),
   );

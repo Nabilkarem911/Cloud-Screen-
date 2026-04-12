@@ -21,7 +21,9 @@ export class ListScreensDto {
   @IsOptional()
   playlistGroupId?: string;
 
-  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
   @IsBoolean()
   @IsOptional()
   ungrouped?: boolean;

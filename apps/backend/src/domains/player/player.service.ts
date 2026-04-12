@@ -32,7 +32,10 @@ export class PlayerService {
   /**
    * Initial load + offline recovery: playlist payload, ticker, screen id.
    */
-  async getBootstrap(serialNumber: string | undefined, secret: string | undefined) {
+  async getBootstrap(
+    serialNumber: string | undefined,
+    secret: string | undefined,
+  ) {
     this.assertPlayerSecret(secret);
     if (!serialNumber?.trim()) {
       throw new NotFoundException('serialNumber is required');
@@ -45,18 +48,25 @@ export class PlayerService {
         serialNumber: true,
         workspaceId: true,
         playerTicker: true,
+        workspace: { select: { isPaused: true, name: true } },
       },
     });
     if (!screen) {
       throw new NotFoundException('Screen not found');
     }
+    if (screen.workspace.isPaused) {
+      throw new ForbiddenException('Workspace is paused');
+    }
 
-    const playlist = await this.playlists.getPlaylistPayloadForScreen(screen.id);
+    const playlist = await this.playlists.getPlaylistPayloadForScreen(
+      screen.id,
+    );
 
     return {
       screenId: screen.id,
       serialNumber: screen.serialNumber,
       workspaceId: screen.workspaceId,
+      workspaceName: screen.workspace.name,
       ticker: screen.playerTicker ?? null,
       playlist: playlist ?? {
         workspaceId: screen.workspaceId,
@@ -83,10 +93,16 @@ export class PlayerService {
 
     const screen = await this.prisma.screen.findFirst({
       where: { serialNumber: serialNumber.trim() },
-      select: { workspaceId: true },
+      select: {
+        workspaceId: true,
+        workspace: { select: { isPaused: true } },
+      },
     });
     if (!screen) {
       throw new NotFoundException('Screen not found');
+    }
+    if (screen.workspace.isPaused) {
+      throw new ForbiddenException('Workspace is paused');
     }
 
     return this.canvases.getCompiledForPlayer(screen.workspaceId, canvasId);
@@ -106,24 +122,27 @@ export class PlayerService {
     });
     if (!dbUser) throw new UnauthorizedException();
 
-    let ws = null as { id: string } | null;
+    let ws = null as { id: string; isPaused: boolean; name: string } | null;
     if (workspaceId?.trim()) {
       ws = await this.prisma.workspace.findFirst({
         where: { id: workspaceId.trim() },
-        select: { id: true },
+        select: { id: true, isPaused: true, name: true },
       });
     } else if (workspaceName?.trim()) {
       ws = await this.prisma.workspace.findFirst({
         where: { name: workspaceName.trim() },
-        select: { id: true },
+        select: { id: true, isPaused: true, name: true },
       });
     } else {
       ws = await this.prisma.workspace.findFirst({
         where: { name: 'Admin Control' },
-        select: { id: true },
+        select: { id: true, isPaused: true, name: true },
       });
     }
     if (!ws) throw new NotFoundException('Workspace not found');
+    if (ws.isPaused) {
+      throw new ForbiddenException('Workspace is paused');
+    }
 
     if (!dbUser.isSuperAdmin) {
       const m = await this.prisma.workspaceMember.findUnique({
@@ -146,12 +165,15 @@ export class PlayerService {
     });
     if (!screen) throw new NotFoundException('No screen in workspace');
 
-    const playlist = await this.playlists.getPlaylistPayloadForScreen(screen.id);
+    const playlist = await this.playlists.getPlaylistPayloadForScreen(
+      screen.id,
+    );
 
     return {
       screenId: screen.id,
       serialNumber: screen.serialNumber,
       workspaceId: screen.workspaceId,
+      workspaceName: ws.name,
       ticker: screen.playerTicker ?? null,
       playlist: playlist ?? {
         workspaceId: screen.workspaceId,

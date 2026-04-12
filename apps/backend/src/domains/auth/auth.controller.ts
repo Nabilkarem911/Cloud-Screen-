@@ -9,10 +9,12 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterStartDto } from './dto/register-start.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
+import { RegisterResendDto } from './dto/register-resend.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
@@ -27,8 +29,18 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('register/start')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async registerStart(@Body() dto: RegisterStartDto) {
     return this.authService.registerStart(dto);
+  }
+
+  @HttpCode(200)
+  @Post('register/resend')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async registerResend(@Body() dto: RegisterResendDto) {
+    return this.authService.registerResend(dto.email);
   }
 
   @HttpCode(200)
@@ -48,6 +60,8 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('forgot-password')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
@@ -77,9 +91,7 @@ export class AuthController {
   /** Development only: sign in as the first active user (no password). */
   @HttpCode(200)
   @Post('dev-login')
-  async devLogin(
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<{
+  async devLogin(@Res({ passthrough: true }) response: Response): Promise<{
     user: { id: string; email: string; fullName: string; locale: string };
     workspaces: Array<{ id: string; name: string; slug: string; role: string }>;
     accessToken: string;

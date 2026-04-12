@@ -55,7 +55,9 @@ export class CanvasesService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.width !== undefined ? { width: dto.width } : {}),
         ...(dto.height !== undefined ? { height: dto.height } : {}),
-        ...(dto.durationSec !== undefined ? { durationSec: dto.durationSec } : {}),
+        ...(dto.durationSec !== undefined
+          ? { durationSec: dto.durationSec }
+          : {}),
         ...(dto.layoutData !== undefined
           ? { layoutData: dto.layoutData as object }
           : {}),
@@ -64,6 +66,39 @@ export class CanvasesService {
     });
     await this.broadcastCanvasLive(id);
     return updated;
+  }
+
+  /** Deep-copy a canvas into another workspace (e.g. playlist clone across branches). */
+  async duplicateCanvasToWorkspace(params: {
+    sourceWorkspaceId: string;
+    canvasId: string;
+    targetWorkspaceId: string;
+    createdById: string;
+  }): Promise<{ id: string }> {
+    const c = await this.prisma.canvas.findFirst({
+      where: {
+        id: params.canvasId,
+        workspaceId: params.sourceWorkspaceId,
+      },
+    });
+    if (!c) throw new NotFoundException('Canvas not found');
+
+    const copy = await this.prisma.canvas.create({
+      data: {
+        workspaceId: params.targetWorkspaceId,
+        createdById: params.createdById,
+        name: `${c.name} (copy)`,
+        type: c.type,
+        durationSec: c.durationSec,
+        contentUrl: c.contentUrl,
+        layoutData: (c.layoutData ?? {}) as object,
+        width: c.width,
+        height: c.height,
+        metadata: c.metadata === null ? undefined : (c.metadata as object),
+      },
+      select: { id: true },
+    });
+    return copy;
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {

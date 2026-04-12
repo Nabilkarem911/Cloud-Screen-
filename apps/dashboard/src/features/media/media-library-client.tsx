@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { Film, ImageIcon, Trash2, Upload, Sparkles } from 'lucide-react';
+import { Film, Folder, FolderPlus, ImageIcon, Pencil, Trash2, Upload, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -19,9 +19,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { apiFetch } from '@/features/auth/session';
+import { apiFetch, readApiErrorMessage } from '@/features/auth/session';
 import { useWorkspace } from '@/features/workspace/workspace-context';
-import { DemoDataButton } from '@/features/workspace/demo-data-button';
 import { cn } from '@/lib/utils';
 
 export type MediaItem = {
@@ -34,7 +33,61 @@ export type MediaItem = {
   /** Present when listing aggregated account media */
   workspaceId?: string;
   workspaceName?: string;
+  folderId?: string | null;
+  folderName?: string | null;
 };
+
+type MediaFolder = {
+  id: string;
+  name: string;
+  createdAt: string;
+  _count: { medias: number };
+};
+
+function MediaPreviewImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  const t = useTranslations('mediaClient');
+  if (failed) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#0F1729]/90 p-2 text-center">
+        <ImageIcon className="h-8 w-8 shrink-0 text-[#FF6B00]/70" strokeWidth={1.5} />
+        <span className="px-1 text-[10px] leading-tight text-muted-foreground">{t('previewUnavailable')}</span>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      alt={alt}
+      src={src}
+      className="h-full w-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function MediaPreviewVideo({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  const t = useTranslations('mediaClient');
+  if (failed) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#0F1729]/90 p-2 text-center">
+        <Film className="h-8 w-8 shrink-0 text-[#FF6B00]/70" strokeWidth={1.5} />
+        <span className="px-1 text-[10px] leading-tight text-muted-foreground">{t('previewUnavailable')}</span>
+      </div>
+    );
+  }
+  return (
+    <video
+      src={src}
+      className="h-full w-full object-cover"
+      muted
+      playsInline
+      preload="metadata"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function EmptyMediaIllustration() {
   return (
@@ -96,6 +149,9 @@ export function MediaLibraryClient() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+  const [newFolderName, setNewFolderName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; workspaceId: string } | null>(
     null,
   );
@@ -152,9 +208,36 @@ export function MediaLibraryClient() {
     setLoading(false);
   }, [workspaceId, scope, workspaces]);
 
+  const loadFolders = useCallback(async () => {
+    if (!workspaceId || scope === 'all') {
+      setFolders([]);
+      return;
+    }
+    const res = await apiFetch(
+      `/media/folders/list?workspaceId=${encodeURIComponent(workspaceId)}`,
+    );
+    if (!res.ok) {
+      setFolders([]);
+      return;
+    }
+    const rows = (await res.json()) as MediaFolder[];
+    setFolders(Array.isArray(rows) ? rows : []);
+  }, [workspaceId, scope]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (scope !== 'branch') return;
+    if (workspaceId) return;
+    if (workspaces.length === 0) return;
+    setScope('all');
+  }, [scope, workspaceId, workspaces.length, setScope]);
+
+  useEffect(() => {
+    void loadFolders();
+  }, [loadFolders]);
 
   useEffect(() => {
     if (scope !== 'branch' || !workspaceId || loading || pending || items.length > 0) return;
@@ -188,21 +271,39 @@ export function MediaLibraryClient() {
           const form = new FormData();
           form.append('file', file);
           const res = await apiFetch(
-            `/media/upload?workspaceId=${encodeURIComponent(workspaceId)}`,
+            `/media/upload?workspaceId=${encodeURIComponent(workspaceId)}${selectedFolderId !== 'all' ? `&folderId=${encodeURIComponent(selectedFolderId)}` : ''}`,
             { method: 'POST', body: form },
           );
-          if (!res.ok) throw new Error('Upload failed');
+          if (!res.ok) {
+            const msg = await readApiErrorMessage(res);
+            if (
+              msg.includes('STORAGE_QUOTA_EXCEEDED') ||
+              msg.includes('STORAGE_LIMIT_REACHED')
+            ) {
+              throw new Error('STORAGE_QUOTA_EXCEEDED');
+            }
+            throw new Error(msg || 'Upload failed');
+          }
         }
         toast.success(t('uploadComplete'));
         await load();
+        await loadFolders();
         bumpWorkspaceDataEpoch();
-      } catch {
-        toast.error(t('uploadFailed'));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        if (
+          msg.includes('STORAGE_QUOTA_EXCEEDED') ||
+          msg.includes('STORAGE_LIMIT_REACHED')
+        ) {
+          toast.error(t('storageQuotaExceeded'));
+        } else {
+          toast.error(t('uploadFailed'));
+        }
       } finally {
         setPending(false);
       }
     },
-    [load, workspaceId, bumpWorkspaceDataEpoch, scope, t],
+    [load, workspaceId, bumpWorkspaceDataEpoch, scope, t, selectedFolderId, loadFolders],
   );
 
   const onDrop = useCallback(
@@ -212,10 +313,12 @@ export function MediaLibraryClient() {
     [uploadFiles],
   );
 
+  const dropzoneEnabled = Boolean(workspaceId && scope === 'branch' && !pending);
+
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     disabled: !workspaceId || pending || scope === 'all',
-    noClick: true,
+    noClick: !dropzoneEnabled,
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
       'video/*': ['.mp4', '.webm', '.mov'],
@@ -246,7 +349,78 @@ export function MediaLibraryClient() {
     }
     toast.success(t('deleted'));
     await load();
+    await loadFolders();
     bumpWorkspaceDataEpoch();
+  };
+
+  const createFolder = async () => {
+    const name = newFolderName.trim();
+    if (!workspaceId || !name || scope === 'all') return;
+    const res = await apiFetch(
+      `/media/folders?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    );
+    if (!res.ok) {
+      toast.error(t('folderCreateFailed'));
+      return;
+    }
+    setNewFolderName('');
+    toast.success(t('folderCreated'));
+    await loadFolders();
+  };
+
+  const renameFolder = async (folderId: string, current: string) => {
+    if (!workspaceId || scope === 'all') return;
+    const name = window.prompt(t('folderRenamePrompt'), current)?.trim();
+    if (!name || name === current) return;
+    const res = await apiFetch(
+      `/media/folders/${encodeURIComponent(folderId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'PATCH', body: JSON.stringify({ name }) },
+    );
+    if (!res.ok) {
+      toast.error(t('folderRenameFailed'));
+      return;
+    }
+    toast.success(t('folderRenamed'));
+    await loadFolders();
+  };
+
+  const deleteFolder = async (folderId: string) => {
+    if (!workspaceId || scope === 'all') return;
+    const confirmed = window.confirm(t('folderDeleteConfirm'));
+    if (!confirmed) return;
+    const res = await apiFetch(
+      `/media/folders/${encodeURIComponent(folderId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
+      { method: 'DELETE' },
+    );
+    if (!res.ok) {
+      toast.error(t('folderDeleteFailed'));
+      return;
+    }
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId('all');
+    }
+    toast.success(t('folderDeleted'));
+    await loadFolders();
+    await load();
+  };
+
+  const moveMedia = async (mediaId: string, folderId: string) => {
+    if (!workspaceId || scope === 'all') return;
+    const nextFolderId = folderId === 'all' ? null : folderId;
+    const res = await apiFetch(
+      `/media/${encodeURIComponent(mediaId)}/folder?workspaceId=${encodeURIComponent(workspaceId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ folderId: nextFolderId }),
+      },
+    );
+    if (!res.ok) {
+      toast.error(t('moveFolderFailed'));
+      return;
+    }
+    await load();
+    await loadFolders();
   };
 
   if (scope === 'branch' && !workspaceId) {
@@ -262,26 +436,22 @@ export function MediaLibraryClient() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="vc-glass vc-card-surface flex flex-col gap-6 rounded-3xl border border-[rgba(147,51,234,0.22)] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8"
+        className="vc-glass vc-card-surface flex flex-col gap-6 rounded-3xl border border-[#FF6B00]/12 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8 dark:border-white/10"
       >
         <div className="min-w-0 flex-1">
-          <p className="vc-page-kicker">{t('kicker')}</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
-            {t('title')}
-          </h2>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             {scope === 'all' ? t('descriptionAllBranches') : t('description')}
           </p>
           {workspaces.length > 1 ? (
-            <div className="mt-4 inline-flex rounded-2xl border border-[#FF6B00]/20 bg-[#0F1729]/30 p-1 dark:bg-black/20">
+            <div className="mt-4 inline-flex flex-wrap gap-2 rounded-2xl border border-[#FF6B00]/20 bg-[#0F1729]/30 p-1 dark:bg-black/20">
               <button
                 type="button"
                 onClick={() => setScope('branch')}
                 className={cn(
                   'rounded-xl px-4 py-2 text-sm font-semibold transition',
                   scope === 'branch'
-                    ? 'bg-[#FF6B00] text-amber-950 shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'border border-[#FF6B00]/55 bg-[#FF6B00]/18 text-white'
+                    : 'border border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
                 {t('scopeBranch')}
@@ -292,8 +462,8 @@ export function MediaLibraryClient() {
                 className={cn(
                   'rounded-xl px-4 py-2 text-sm font-semibold transition',
                   scope === 'all'
-                    ? 'bg-[#FF6B00] text-amber-950 shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'border border-[#FF6B00]/55 bg-[#FF6B00]/18 text-white'
+                    : 'border border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
                 {t('scopeAll')}
@@ -301,7 +471,7 @@ export function MediaLibraryClient() {
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -310,28 +480,97 @@ export function MediaLibraryClient() {
             multiple
             onChange={onFileInputChange}
           />
-          <Button
+          <button
             type="button"
-            size="lg"
-            className="rounded-2xl bg-gradient-to-r from-[#FF6B00] to-[#CC4400] px-8 font-semibold text-white shadow-[0_8px_28px_-8px_rgba(10,15,29,0.45),0_0_24px_-8px_rgba(255,107,0,0.22)] hover:opacity-95"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition',
+              'border-[#FF6B00]/55 bg-[#FF6B00]/18 text-white hover:bg-[#FF6B00]/22',
+              (pending || scope === 'all') && 'pointer-events-none opacity-50',
+            )}
             onClick={onPickClick}
             disabled={pending || scope === 'all'}
           >
-            <Upload className="me-2 h-5 w-5 text-white" strokeWidth={2} />
+            <Upload className="h-4 w-4 shrink-0 text-[#FFB37A]" strokeWidth={2} />
             {pending ? t('uploading') : t('uploadFiles')}
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="outline"
-            size="lg"
-            className="rounded-2xl border-[#FF6B00]/40 bg-[#FF6B00]/5 font-medium hover:bg-[#FF6B00]/10"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition',
+              'border-[#FF6B00]/25 bg-white/60 text-[#1B254B] hover:border-[#FF6B00]/50 hover:bg-[#FF6B00]/10',
+              'dark:border-white/15 dark:bg-[#1B254B]/50 dark:text-white dark:hover:bg-[#FF6B00]/15',
+              (pending || scope === 'all') && 'pointer-events-none opacity-50',
+            )}
             onClick={open}
             disabled={pending || scope === 'all'}
           >
             {t('browse')}
-          </Button>
+          </button>
         </div>
       </motion.div>
+
+      {scope === 'branch' ? (
+        <div className="vc-card-surface rounded-2xl border border-border/70 p-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Folder className="h-4 w-4 text-[#FF6B00]" />
+            <p className="text-sm font-semibold text-foreground">{t('foldersTitle')}</p>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedFolderId('all')}
+              className={cn(
+                'rounded-lg border px-2.5 py-1 text-xs font-semibold',
+                selectedFolderId === 'all'
+                  ? 'border-[#FF6B00]/60 bg-[#FF6B00]/15 text-foreground'
+                  : 'border-border text-muted-foreground',
+              )}
+            >
+              {t('allFolders')}
+            </button>
+            {folders.map((folder) => (
+              <div key={folder.id} className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedFolderId(folder.id)}
+                  className={cn(
+                    'rounded-lg border px-2.5 py-1 text-xs font-semibold',
+                    selectedFolderId === folder.id
+                      ? 'border-[#FF6B00]/60 bg-[#FF6B00]/15 text-foreground'
+                      : 'border-border text-muted-foreground',
+                  )}
+                >
+                  {folder.name} ({folder._count.medias})
+                </button>
+                <button type="button" onClick={() => void renameFolder(folder.id, folder.name)} className="rounded p-1 text-muted-foreground hover:text-foreground">
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => void deleteFolder(folder.id)} className="rounded p-1 text-muted-foreground hover:text-red-500">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder={t('folderNamePlaceholder')}
+              className="h-9 min-w-[220px] rounded-lg border border-border bg-background px-3 text-sm"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-lg"
+              onClick={() => void createFolder()}
+              disabled={!newFolderName.trim()}
+            >
+              <FolderPlus className="me-1 h-4 w-4" />
+              {t('createFolder')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div
         {...getRootProps()}
@@ -358,18 +597,17 @@ export function MediaLibraryClient() {
               </p>
             </div>
             {scope === 'branch' ? (
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <DemoDataButton onDone={() => void load()} />
-                <Button
-                  type="button"
-                  size="lg"
-                  className="rounded-2xl bg-gradient-to-r from-[#FF6B00] to-amber-500 font-semibold text-amber-950 shadow-md"
-                  onClick={onPickClick}
-                >
-                  <Upload className="me-2 h-5 w-5" />
-                  {t('uploadFirst')}
-                </Button>
-              </div>
+              <button
+                type="button"
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition',
+                  'border-[#FF6B00]/55 bg-[#FF6B00]/18 text-white hover:bg-[#FF6B00]/22',
+                )}
+                onClick={onPickClick}
+              >
+                <Upload className="h-4 w-4 shrink-0 text-[#FFB37A]" strokeWidth={2} />
+                {t('uploadFirst')}
+              </button>
             ) : (
               <p className="max-w-md text-sm text-muted-foreground">{t('emptyAllBranchesHint')}</p>
             )}
@@ -386,7 +624,13 @@ export function MediaLibraryClient() {
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <AnimatePresence mode="popLayout">
-                {items.map((m, i) => (
+                {items
+                  .filter((m) =>
+                    selectedFolderId === 'all'
+                      ? true
+                      : (m.folderId ?? null) === selectedFolderId,
+                  )
+                  .map((m, i) => (
                   <motion.div
                     key={m.workspaceId ? `${m.workspaceId}-${m.id}` : m.id}
                     layout
@@ -398,20 +642,9 @@ export function MediaLibraryClient() {
                   >
                     <div className="relative aspect-[4/3] bg-black/80">
                       {m.mimeType.startsWith('image/') ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          alt=""
-                          src={m.publicUrl}
-                          className="h-full w-full object-cover"
-                        />
+                        <MediaPreviewImage src={m.publicUrl} alt="" />
                       ) : (
-                        <video
-                          src={m.publicUrl}
-                          className="h-full w-full object-cover"
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
+                        <MediaPreviewVideo src={m.publicUrl} />
                       )}
                       <div className="absolute left-2 top-2 flex items-center gap-1 rounded-lg border border-[#FF6B00]/25 bg-black/55 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/95 shadow-[0_0_16px_-4px_rgba(255, 107, 0,0.2)] backdrop-blur-md">
                         {m.mimeType.startsWith('video/') ? (
@@ -436,6 +669,22 @@ export function MediaLibraryClient() {
                       </button>
                     </div>
                     <div className="space-y-1 p-3">
+                      {scope === 'branch' ? (
+                        <select
+                          className="h-7 w-full rounded border border-border bg-background px-2 text-[11px]"
+                          value={m.folderId ?? 'all'}
+                          onChange={(e) => {
+                            void moveMedia(m.id, e.target.value);
+                          }}
+                        >
+                          <option value="all">{t('noFolder')}</option>
+                          {folders.map((folder) => (
+                            <option key={folder.id} value={folder.id}>
+                              {folder.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
                       {m.workspaceName ? (
                         <p className="mb-1 truncate text-[10px] font-bold uppercase tracking-wide text-[#FF6B00]">
                           {m.workspaceName}

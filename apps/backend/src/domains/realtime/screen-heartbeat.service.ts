@@ -77,18 +77,23 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  async applyHeartbeatFromSocket(clientId: string): Promise<void> {
+  async applyHeartbeatFromSocket(
+    clientId: string,
+    opts?: { isOfflineMode?: boolean },
+  ): Promise<void> {
     const binding = this.socketBindings.get(clientId);
     if (!binding) return;
 
     binding.lastPingAt = Date.now();
     const now = new Date();
+    const offlineCache = Boolean(opts?.isOfflineMode);
 
     await this.prisma.screen.update({
       where: { id: binding.screenId },
       data: {
         status: ScreenStatus.ONLINE,
         lastSeenAt: now,
+        isOfflineCacheMode: offlineCache,
       },
     });
 
@@ -97,6 +102,7 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
       serialNumber: binding.serialNumber,
       status: ScreenStatus.ONLINE,
       lastSeenAt: now.toISOString(),
+      isOfflineCacheMode: offlineCache,
     });
   }
 
@@ -120,7 +126,7 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
 
       await this.prisma.screen.update({
         where: { id: row.screenId },
-        data: { status: ScreenStatus.OFFLINE },
+        data: { status: ScreenStatus.OFFLINE, isOfflineCacheMode: false },
       });
 
       this.emitScreenStatus(row.workspaceId, {
@@ -128,6 +134,7 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
         serialNumber: row.serialNumber,
         status: ScreenStatus.OFFLINE,
         lastSeenAt: new Date().toISOString(),
+        isOfflineCacheMode: false,
       });
 
       void this.io?.in(socketId).disconnectSockets(true);
@@ -145,23 +152,28 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
       serialNumber: string;
       status: ScreenStatus;
       lastSeenAt: string;
+      isOfflineCacheMode: boolean;
     },
   ): void {
     this.io?.to(`workspace:${workspaceId}`).emit('screen:status', payload);
   }
 
-  emitPlaylistUpdated(
-    screenId: string,
+  emitPairingStarted(
+    workspaceId: string,
     payload: Record<string, unknown>,
   ): void {
-    this.io?.to(`screen:${screenId}`).emit('playlist:updated', payload);
+    this.io?.to(`workspace:${workspaceId}`).emit('pairing:started', payload);
   }
 
-  emitContentSync(
-    screenId: string,
+  emitContentSync(screenId: string, payload: Record<string, unknown>): void {
+    this.io?.to(`screen:${screenId}`).emit('content:sync', payload);
+  }
+
+  emitWorkspaceSubscriptionUpdated(
+    workspaceId: string,
     payload: Record<string, unknown>,
   ): void {
-    this.io?.to(`screen:${screenId}`).emit('content:sync', payload);
+    this.io?.to(`workspace:${workspaceId}`).emit('workspace:subscription', payload);
   }
 
   emitScheduleChanged(
@@ -175,10 +187,7 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  emitRemoteCommand(
-    screenId: string,
-    payload: Record<string, unknown>,
-  ): void {
+  emitRemoteCommand(screenId: string, payload: Record<string, unknown>): void {
     this.io?.to(`screen:${screenId}`).emit('remote:command', payload);
   }
 
@@ -192,5 +201,13 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
   /** Live canvas layout push for players showing this design */
   emitCanvasLive(screenId: string, payload: Record<string, unknown>): void {
     this.io?.to(`screen:${screenId}`).emit('canvas:live', payload);
+  }
+
+  /** Player apps can join `pairing:{sessionId}` to receive credentials when the dashboard claims the code. */
+  emitPairingSessionComplete(
+    sessionId: string,
+    payload: Record<string, unknown>,
+  ): void {
+    this.io?.to(`pairing:${sessionId}`).emit('pairing:complete', payload);
   }
 }

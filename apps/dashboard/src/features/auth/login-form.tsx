@@ -70,7 +70,7 @@ export function LoginForm({
     } else if (isSuper) {
       dest = `/${activeLocale}/overview`;
     } else if (workspaceId) {
-      dest = `/${activeLocale}/media`;
+      dest = `/${activeLocale}/overview`;
     } else {
       dest = `/${activeLocale}`;
     }

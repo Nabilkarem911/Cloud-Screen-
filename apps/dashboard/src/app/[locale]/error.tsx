@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { devError } from '@/lib/dev-log';
 
 type Props = {
   error: Error & { digest?: string };
@@ -14,10 +15,7 @@ export default function LocaleError({ error, reset }: Props) {
   const isArabic =
     typeof document !== 'undefined' && document.documentElement.lang.toLowerCase().startsWith('ar');
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      // eslint-disable-next-line no-console -- dev-only diagnostics
-      console.error('[locale route error]', error);
-    }
+    devError('[locale route error]', error);
   }, [error]);
 
   return (

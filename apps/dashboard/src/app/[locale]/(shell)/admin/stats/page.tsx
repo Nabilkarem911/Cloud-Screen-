@@ -18,6 +18,7 @@ export default async function AdminStatsPage({
         ariaLabel={tb('ariaLabel')}
         items={[
           { href: `/${locale}/overview`, label: tb('root') },
+          { href: `/${locale}/admin`, label: tb('home') },
           { label: tb('stats') },
         ]}
       />

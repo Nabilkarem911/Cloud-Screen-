@@ -127,6 +127,10 @@ export function useShellHeaderMeta(pathname: string | null): ShellHeaderMeta {
       pageTitle = t('pageTitles.adminCustomers');
     } else if (rest[0] === 'admin' && rest[1] === 'users') {
       pageTitle = t('pageTitles.adminUsers');
+    } else if (rest[0] === 'admin' && rest[1] === 'fleet') {
+      pageTitle = t('pageTitles.adminFleet');
+    } else if (rest[0] === 'admin' && rest[1] === 'screens') {
+      pageTitle = t('pageTitles.adminScreens');
     } else if (rest[0] === 'admin' && rest[1] === 'workspaces') {
       pageTitle = t('pageTitles.adminWorkspaces');
     } else if (rest[0] === 'admin' && rest[1] === 'staff') {
@@ -139,8 +143,29 @@ export function useShellHeaderMeta(pathname: string | null): ShellHeaderMeta {
       pageTitle = t('pageTitles.adminSettings');
     } else if (rest[0] === 'admin' && rest[1] === 'billing') {
       pageTitle = t('pageTitles.settingsBilling');
+    } else if (rest[0] === 'admin' && rest.length === 1) {
+      pageTitle = t('pageTitles.adminHome');
     } else if (rest[0] === 'admin') {
       pageTitle = t('pageTitles.adminOverview');
+    }
+
+    const clientMainWithBack = new Set([
+      'media',
+      'screens',
+      'studio',
+      'playlists',
+      'schedules',
+      'team',
+      'billing',
+    ]);
+    if (rest.length === 1 && clientMainWithBack.has(rest[0])) {
+      return {
+        pageTitle,
+        kicker: '',
+        showBack: true,
+        backHref: `${base}/overview`,
+        backLabel: t('backToOverview'),
+      };
     }
 
     return {

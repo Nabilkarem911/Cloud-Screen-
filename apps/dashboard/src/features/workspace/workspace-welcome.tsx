@@ -2,56 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Building2, Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { Building2, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { apiFetch, consumePendingWorkspaceCreate } from '@/features/auth/session';
-import { useWorkspace } from '@/features/workspace/workspace-context';
+import { consumePendingWorkspaceCreate } from '@/features/auth/session';
 import { WorkspaceCreateDialog } from '@/features/workspace/workspace-create-dialog';
 
 export function WorkspaceWelcome() {
   const t = useTranslations('workspaceWelcome');
-  const { refreshWorkspaces, setWorkspaceId, bumpWorkspaceDataEpoch } = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
-  const [booting, setBooting] = useState(false);
 
   useEffect(() => {
     if (consumePendingWorkspaceCreate()) {
       setCreateOpen(true);
       toast.info(t('sessionRestored'));
     }
-  }, []);
-
-  const runBootstrap = async () => {
-    setBooting(true);
-    try {
-      const res = await apiFetch('/workspaces/bootstrap-demo', { method: 'POST' });
-      let data: { workspace?: { id: string }; message?: string } = {};
-      try {
-        data = (await res.json()) as { workspace?: { id: string }; message?: string };
-      } catch {
-        /* non-JSON */
-      }
-      if (!res.ok) {
-        const msg =
-          data && typeof data === 'object' && 'message' in data && data.message
-            ? String(data.message)
-            : t('demoCreateFailed');
-        toast.error(msg);
-        return;
-      }
-      toast.success(data.message ?? t('demoWorkspaceReady'));
-      const wid = data.workspace?.id;
-      await refreshWorkspaces(wid ?? null);
-      if (wid) setWorkspaceId(wid);
-      bumpWorkspaceDataEpoch();
-    } catch {
-      toast.error(t('requestFailed'));
-    } finally {
-      setBooting(false);
-    }
-  };
+  }, [t]);
 
   return (
     <>
@@ -86,25 +53,7 @@ export function WorkspaceWelcome() {
               <Building2 className="me-2 h-5 w-5" />
               {t('createFirstWorkspace')}
             </Button>
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              className="h-12 rounded-2xl border-[#FF6B00]/40 bg-[#FF6B00]/10 font-semibold text-foreground hover:bg-[#FF6B00]/20"
-              onClick={() => void runBootstrap()}
-              disabled={booting}
-            >
-              {booting ? (
-                <Loader2 className="me-2 h-5 w-5 animate-spin" />
-              ) : (
-                <Wand2 className="me-2 h-5 w-5 text-amber-700 dark:text-[#FF6B00]" />
-              )}
-              {t('loadDemoData')}
-            </Button>
           </div>
-          <p className="mt-6 text-xs text-muted-foreground">
-            {t('demoFootnote')}
-          </p>
         </motion.div>
       </div>
 

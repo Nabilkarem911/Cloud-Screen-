@@ -12,6 +12,7 @@ type ScreenStatusPayload = {
   serialNumber: string;
   status: ScreenStatus;
   lastSeenAt: string;
+  isOfflineCacheMode?: boolean;
 };
 
 function getRealtimeBaseUrl(): string {
@@ -49,7 +50,11 @@ export function useScreenRealtime(
             ? {
                 ...screen,
                 status: payload.status,
+                lastSeenAt: payload.lastSeenAt,
                 updatedAt: payload.lastSeenAt,
+                ...(typeof payload.isOfflineCacheMode === 'boolean'
+                  ? { isOfflineCacheMode: payload.isOfflineCacheMode }
+                  : {}),
               }
             : screen,
         ),

@@ -11,15 +11,17 @@ import {
   Activity,
   CalendarClock,
   ChevronDown,
+  Clapperboard,
   CreditCard,
+  Globe2,
   Image as ImageIcon,
   LayoutDashboard,
-  ListMusic,
+  LayoutGrid,
   LogOut,
   Monitor,
   Moon,
-  PenLine,
   ScrollText,
+  Server,
   Settings,
   SlidersHorizontal,
   Sun,
@@ -39,13 +41,17 @@ const NAV_ICON_STROKE = 2;
 
 const CLIENT_NAV = [
   { key: 'home', hrefKey: 'overview' as const, icon: LayoutDashboard },
-  { key: 'screens', hrefKey: 'screens' as const, icon: Monitor },
   { key: 'media', hrefKey: 'media' as const, icon: ImageIcon },
-  { key: 'studio', hrefKey: 'studio' as const, icon: PenLine },
-  { key: 'playlists', hrefKey: 'playlists' as const, icon: ListMusic },
+  { key: 'newPlaylist', hrefKey: 'playlists' as const, icon: Clapperboard },
+  { key: 'newScreen', hrefKey: 'screens' as const, icon: Monitor },
   { key: 'schedules', hrefKey: 'schedules' as const, icon: CalendarClock },
   { key: 'team', hrefKey: 'team' as const, icon: Users },
 ] as const;
+
+/** Routes that open without a header workspace selection (media uses all-branches view). */
+const CLIENT_NAV_ALLOW_WITHOUT_WORKSPACE = new Set<
+  (typeof CLIENT_NAV)[number]['hrefKey']
+>(['overview', 'media']);
 
 /** Orange crystal — white labels; active = identity orange icon + glow + bg-white/5 */
 function shellNavAccent() {
@@ -64,6 +70,7 @@ type ShellNavAccent = ReturnType<typeof shellNavAccent>;
 function shellNavLinkClass(active: boolean, accent: ShellNavAccent) {
   return cn(
     'group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[13px] transition-all duration-300',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6B00]/45',
     'border-inline-start-[3px]',
     active
       ? 'bg-white/5 border-[#FF6B00]'
@@ -107,14 +114,20 @@ function hrefFor(
   hrefKey:
     | (typeof CLIENT_NAV)[number]['hrefKey']
     | 'overview'
+    | 'adminHome'
     | 'adminCustomers'
     | 'adminStaff'
     | 'adminStats'
     | 'adminLogs'
-    | 'adminSettings',
+    | 'adminSettings'
+    | 'adminFleet'
+    | 'adminScreens',
 ): string {
   if (hrefKey === 'overview') return `/${locale}/overview`;
+  if (hrefKey === 'adminHome') return `/${locale}/admin`;
   if (hrefKey === 'adminCustomers') return `/${locale}/admin/customers`;
+  if (hrefKey === 'adminFleet') return `/${locale}/admin/fleet`;
+  if (hrefKey === 'adminScreens') return `/${locale}/admin/screens`;
   if (hrefKey === 'adminStaff') return `/${locale}/admin/staff`;
   if (hrefKey === 'adminStats') return `/${locale}/admin/stats`;
   if (hrefKey === 'adminLogs') return `/${locale}/admin/logs`;
@@ -136,19 +149,34 @@ function sovereignLinkActive(
   locale: string,
   hrefKey:
     | 'overview'
+    | 'adminHome'
     | 'adminCustomers'
     | 'adminStaff'
     | 'adminStats'
     | 'adminLogs'
-    | 'adminSettings',
+    | 'adminSettings'
+    | 'adminFleet'
+    | 'adminScreens',
 ): boolean {
   if (!pathname) return false;
   if (hrefKey === 'overview') return isOverviewPath(pathname, locale);
+  if (hrefKey === 'adminHome') {
+    return (
+      pathname === `/${locale}/admin` ||
+      pathname === `/${locale}/admin/`
+    );
+  }
   if (hrefKey === 'adminCustomers') {
     return (
       pathname.startsWith(`/${locale}/admin/customers`) ||
       pathname.startsWith(`/${locale}/admin/users`)
     );
+  }
+  if (hrefKey === 'adminFleet') {
+    return pathname.startsWith(`/${locale}/admin/fleet`);
+  }
+  if (hrefKey === 'adminScreens') {
+    return pathname.startsWith(`/${locale}/admin/screens`);
   }
   if (hrefKey === 'adminStaff') {
     return pathname.startsWith(`/${locale}/admin/staff`);
@@ -262,7 +290,7 @@ export function ShellSidebar({
         <nav
           key={navLocale}
           className={cn(
-            'vc-scrollbar relative z-[1] flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-4',
+            'vc-scrollbar relative z-[1] flex flex-1 flex-col gap-1 overflow-y-auto px-2.5 py-4',
             rtl ? 'text-right' : 'text-left',
           )}
         >
@@ -281,6 +309,13 @@ export function ShellSidebar({
                 accent={accent}
                 icon={LayoutDashboard}
               />
+              <ShellNavRow
+                href={hrefFor(navLocale, 'adminHome') as Route}
+                label={t('adminHome')}
+                active={sovereignLinkActive(pathname, navLocale, 'adminHome')}
+                accent={accent}
+                icon={LayoutGrid}
+              />
 
               <p
                 className={cn(
@@ -296,6 +331,20 @@ export function ShellSidebar({
                 active={sovereignLinkActive(pathname, navLocale, 'adminCustomers')}
                 accent={accent}
                 icon={Users}
+              />
+              <ShellNavRow
+                href={hrefFor(navLocale, 'adminFleet') as Route}
+                label={t('adminFleet')}
+                active={sovereignLinkActive(pathname, navLocale, 'adminFleet')}
+                accent={accent}
+                icon={Globe2}
+              />
+              <ShellNavRow
+                href={hrefFor(navLocale, 'adminScreens') as Route}
+                label={t('adminScreens')}
+                active={sovereignLinkActive(pathname, navLocale, 'adminScreens')}
+                accent={accent}
+                icon={Server}
               />
 
               <p
@@ -344,7 +393,18 @@ export function ShellSidebar({
                     ? isOverviewPath(pathname, navLocale)
                     : Boolean(pathname?.startsWith(`/${navLocale}/${item.hrefKey}`));
                 const Icon = item.icon;
-                const count = workspaceId ? navCountFor(item.key, counts) : null;
+                const count =
+                  item.key === 'newPlaylist'
+                    ? workspaceId
+                      ? counts.playlists
+                      : null
+                    : item.key === 'newScreen'
+                      ? workspaceId
+                        ? counts.screens
+                        : null
+                      : workspaceId
+                        ? navCountFor(item.key, counts)
+                        : null;
                 return (
                   <Link
                     key={item.key}
@@ -357,7 +417,7 @@ export function ShellSidebar({
                       if (
                         isAuthenticated &&
                         !workspaceId &&
-                        item.hrefKey !== 'overview'
+                        !CLIENT_NAV_ALLOW_WITHOUT_WORKSPACE.has(item.hrefKey)
                       ) {
                         e.preventDefault();
                         toast.error(t('selectWorkspaceToast'));
@@ -407,7 +467,7 @@ export function ShellSidebar({
               />
               <ShellNavRow
                 href={`/${navLocale}/settings/billing` as Route}
-                label={t('billing')}
+                label={t('billingAndPayments')}
                 active={Boolean(pathname?.startsWith(`/${navLocale}/settings/billing`))}
                 accent={accent}
                 icon={CreditCard}
@@ -417,6 +477,20 @@ export function ShellSidebar({
         </nav>
 
         {/* Mobile/tablet account controls moved from header to sidebar end */}
+        {!sovereign ? (
+          <div className="relative z-[2] border-t border-white/10 px-2.5 pb-2 pt-3">
+            <Link
+              href={`/${navLocale}/settings/billing` as Route}
+              className={cn(
+                'inline-flex w-full items-center justify-center rounded-xl border border-[#FF6B00]/60',
+                'bg-gradient-to-r from-[#FF6B00] to-[#FF8A33] px-4 py-2.5 text-sm font-bold text-amber-950',
+                'shadow-[0_10px_30px_-14px_rgba(255,107,0,0.9)] transition hover:brightness-105',
+              )}
+            >
+              {t('upgradePlan')}
+            </Link>
+          </div>
+        ) : null}
         <div className="relative z-[2] mt-auto border-t border-white/10 p-2.5 lg:hidden">
           <div className="flex flex-col gap-2 rounded-xl bg-white/[0.06] p-2 ring-1 ring-inset ring-white/10">
             {showWorkspaceSwitcher ? <WorkspaceSwitcher /> : null}

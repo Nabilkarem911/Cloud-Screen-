@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+## Multi-stage Next.js dashboard
+FROM node:20-bookworm-slim AS build
+WORKDIR /repo
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY apps/backend/package.json apps/backend/
+COPY apps/dashboard/package.json apps/dashboard/
+COPY apps/player/package.json apps/player/
+
+RUN npm ci
+
+COPY apps/dashboard ./apps/dashboard
+
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build -w apps/dashboard \
+  && npm prune --omit=dev
+
+FROM node:20-bookworm-slim AS runner
+WORKDIR /repo
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /repo/package.json /repo/package-lock.json ./
+COPY --from=build /repo/node_modules ./node_modules
+COPY --from=build /repo/apps/dashboard ./apps/dashboard
+
+WORKDIR /repo
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:3000/" >/dev/null || exit 1
+
+CMD ["npm", "run", "start", "-w", "apps/dashboard"]

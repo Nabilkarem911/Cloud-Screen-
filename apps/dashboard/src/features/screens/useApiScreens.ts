@@ -12,6 +12,9 @@ export type ScreenRow = {
   serialNumber: string;
   location?: string | null;
   status: ScreenStatus;
+  /** Last player heartbeat: running from offline cache / no API reachability. */
+  isOfflineCacheMode?: boolean;
+  lastSeenAt?: string | null;
   playlistGroupId?: string | null;
   playlistGroup?: { id: string; name: string } | null;
   activePlaylistId: string | null;
@@ -21,6 +24,8 @@ export type ScreenRow = {
 
 type ListResponse = {
   items: ScreenRow[];
+  page?: number;
+  total?: number;
 };
 
 type ScreensOptions = {
@@ -51,8 +56,9 @@ export function useApiScreens(workspaceId: string | null, options?: ScreensOptio
     });
 
     if (response.ok) {
-      const payload = (await response.json()) as ListResponse;
-      setScreens(payload.items);
+      const payload = (await response.json()) as ListResponse | ScreenRow[];
+      const items = Array.isArray(payload) ? payload : payload.items;
+      setScreens(Array.isArray(items) ? items : []);
     } else {
       setScreens([]);
     }

@@ -16,6 +16,7 @@ const CLIENT_ROUTE_SEGMENTS = new Set([
   'schedules',
   'team',
   'billing',
+  'branches',
 ]);
 
 export function WorkspaceGate({ children }: { children: React.ReactNode }) {

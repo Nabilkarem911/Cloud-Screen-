@@ -1,11 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { RealtimeGateway } from './realtime.gateway';
 import { ScreenHeartbeatService } from './screen-heartbeat.service';
 
 @Module({
-  imports: [ConfigModule, AuthModule],
+  imports: [ConfigModule, forwardRef(() => AuthModule)],
   providers: [RealtimeGateway, ScreenHeartbeatService],
   exports: [ScreenHeartbeatService],
 })

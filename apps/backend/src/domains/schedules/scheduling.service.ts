@@ -21,7 +21,10 @@ function parseHHmm(s: string): number {
 }
 
 /** Current minute-of-day and weekday (0=Sun..6=Sat) in `timeZone`. */
-function nowInWorkspaceTz(at: Date, timeZone: string): { minutes: number; dow: number } {
+function nowInWorkspaceTz(
+  at: Date,
+  timeZone: string,
+): { minutes: number; dow: number } {
   const timeStr = formatInTimeZone(at, timeZone, 'HH:mm');
   const [hh, mm] = timeStr.split(':').map((x) => parseInt(x, 10));
   const minutes = hh * 60 + mm;
@@ -57,7 +60,11 @@ function isDateInRange(
 /**
  * Window [startMin, endMin) may cross midnight if endMin <= startMin (e.g. 22:00–06:00).
  */
-function isMinuteInWindow(nowMin: number, startMin: number, endMin: number): boolean {
+function isMinuteInWindow(
+  nowMin: number,
+  startMin: number,
+  endMin: number,
+): boolean {
   if (startMin === endMin) return false;
   if (startMin < endMin) {
     return nowMin >= startMin && nowMin < endMin;
@@ -75,7 +82,10 @@ export class SchedulingService {
   async resolveEffectivePlaylistId(
     screenId: string,
     at: Date = new Date(),
-  ): Promise<{ playlistId: string | null; source: 'override' | 'schedule' | 'default' }> {
+  ): Promise<{
+    playlistId: string | null;
+    source: 'override' | 'schedule' | 'default';
+  }> {
     const screen = await this.prisma.screen.findUnique({
       where: { id: screenId },
       include: { workspace: true },
@@ -106,7 +116,10 @@ export class SchedulingService {
 
     const matching = schedules
       .filter((s) => this.scheduleMatches(s, at, tz, minutes, dow))
-      .sort((a, b) => b.priority - a.priority || (a.updatedAt > b.updatedAt ? -1 : 1));
+      .sort(
+        (a, b) =>
+          b.priority - a.priority || (a.updatedAt > b.updatedAt ? -1 : 1),
+      );
 
     if (matching.length > 0) {
       const best = matching[0];

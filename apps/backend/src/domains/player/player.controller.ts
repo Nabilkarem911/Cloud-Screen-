@@ -1,7 +1,19 @@
-import { Controller, Get, Headers, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import type { JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
+import { StartPairingSessionDto } from '../pairing/dto/start-pairing-session.dto';
+import { PairingService } from '../pairing/pairing.service';
 import { PlayerService } from './player.service';
 
 /**
@@ -9,7 +21,10 @@ import { PlayerService } from './player.service';
  */
 @Controller('player')
 export class PlayerController {
-  constructor(private readonly playerService: PlayerService) {}
+  constructor(
+    private readonly playerService: PlayerService,
+    private readonly pairing: PairingService,
+  ) {}
 
   @Get('bootstrap')
   async bootstrap(
@@ -41,5 +56,23 @@ export class PlayerController {
     @Headers('x-player-secret') secret: string | undefined,
   ) {
     return this.playerService.getCompiledCanvas(serialNumber, secret, canvasId);
+  }
+
+  /** Pairing v2: player shows `pairingCode`, dashboard claims with workspace JWT. */
+  @Post('pairing/sessions')
+  @HttpCode(201)
+  startPairingSession(
+    @Body() dto: StartPairingSessionDto,
+    @Headers('x-player-secret') secret: string | undefined,
+  ) {
+    return this.pairing.startSession(dto, secret);
+  }
+
+  @Get('pairing/sessions/:sessionId')
+  pollPairingSession(
+    @Param('sessionId') sessionId: string,
+    @Headers('x-pairing-poll-secret') pollSecret: string | undefined,
+  ) {
+    return this.pairing.pollSession(sessionId, pollSecret);
   }
 }

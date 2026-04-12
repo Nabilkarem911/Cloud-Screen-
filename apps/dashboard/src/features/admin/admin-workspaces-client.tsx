@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Building2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -32,6 +33,9 @@ type WorkspaceRow = {
   screenCount: number;
   mediaCount: number;
   storageBytes: number;
+  subscriptionPlan: string | null;
+  subscriptionScreenLimit: number | null;
+  subscriptionStatus: string | null;
 };
 
 function formatBytes(n: number, locale: string): string {
@@ -47,26 +51,42 @@ export function AdminWorkspacesClient() {
   const t = useTranslations('adminWorkspaces');
   const [rows, setRows] = useState<WorkspaceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mockingId, setMockingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await apiFetch('/admin/workspaces');
+    if (!res.ok) {
+      toast.error(t('loadFailed'));
+      setLoading(false);
+      return;
+    }
+    const data = (await res.json()) as WorkspaceRow[];
+    setRows(data);
+    setLoading(false);
+  }, [t]);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const res = await apiFetch('/admin/workspaces');
+    void load();
+  }, [load]);
+
+  const mockPlan = async (workspaceId: string, plan: 'FREE' | 'PRO') => {
+    setMockingId(workspaceId);
+    try {
+      const res = await apiFetch(`/admin/workspaces/${workspaceId}/subscription-mock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
       if (!res.ok) {
-        toast.error(t('loadFailed'));
-        if (!cancelled) setLoading(false);
+        toast.error(t('mockFailed'));
         return;
       }
-      const data = (await res.json()) as WorkspaceRow[];
-      if (!cancelled) {
-        setRows(data);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+      toast.success(t('mockSuccess', { plan }));
+      await load();
+    } finally {
+      setMockingId(null);
+    }
+  };
 
   if (loading) {
     return <AdminCosmicLoader label={t('loading')} />;
@@ -86,6 +106,10 @@ export function AdminWorkspacesClient() {
                 <TableHead className={cn(adminGlassTable.th, 'text-end tabular-nums')}>{t('screens')}</TableHead>
                 <TableHead className={cn(adminGlassTable.th, 'text-end tabular-nums')}>{t('media')}</TableHead>
                 <TableHead className={cn(adminGlassTable.th, 'text-end')}>{t('storage')}</TableHead>
+                <TableHead className={cn(adminGlassTable.th, 'text-start')}>{t('subscription')}</TableHead>
+                <TableHead className={cn(adminGlassTable.th, 'text-end whitespace-nowrap')}>
+                  {t('mockActions')}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -128,6 +152,43 @@ export function AdminWorkspacesClient() {
                   </TableCell>
                   <TableCell className="text-end font-mono text-sm tabular-nums text-muted-foreground">
                     {formatBytes(w.storageBytes, locale)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <p className="font-medium">
+                      {w.subscriptionPlan ?? t('na')}
+                      {w.subscriptionScreenLimit != null ? (
+                        <span className="ms-1 text-muted-foreground">
+                          ({t('screenLimitLabel', { n: w.subscriptionScreenLimit })})
+                        </span>
+                      ) : null}
+                    </p>
+                    {w.subscriptionStatus ? (
+                      <p className="text-[10px] text-muted-foreground">{w.subscriptionStatus}</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-end">
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-[11px]"
+                        disabled={mockingId === w.id}
+                        onClick={() => void mockPlan(w.id, 'PRO')}
+                      >
+                        {t('mockPro')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-[11px]"
+                        disabled={mockingId === w.id}
+                        onClick={() => void mockPlan(w.id, 'FREE')}
+                      >
+                        {t('mockFree')}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

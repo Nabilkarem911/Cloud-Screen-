@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { BriefcaseBusiness, Check, ChevronDown, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import { WorkspaceCreateDialog } from '@/features/workspace/workspace-create-dia
 
 export function WorkspaceSwitcher() {
   const router = useRouter();
+  const pathname = usePathname();
   const locale = useLocale();
   const rtl = locale === 'ar';
   const tWs = useTranslations('workspaceSwitcher');
@@ -30,8 +31,18 @@ export function WorkspaceSwitcher() {
   const [createOpen, setCreateOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const current = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0];
-  const currentLabel = current?.name ?? (workspaces.length === 0 ? tWs('noWorkspacesOption') : '');
+  const pathParts = pathname?.split('/').filter(Boolean) ?? [];
+  const isOverviewHome =
+    pathParts.length === 1 ||
+    (pathParts.length === 2 && pathParts[1] === 'overview');
+
+  const selectedWorkspace = workspaces.find((w) => w.id === workspaceId);
+  const currentLabel =
+    workspaces.length === 0
+      ? tWs('noWorkspacesOption')
+      : isOverviewHome
+        ? tWs('chooseWorkArea')
+        : selectedWorkspace?.name ?? workspaces[0]?.name ?? '';
 
   return (
     <>
@@ -50,7 +61,14 @@ export function WorkspaceSwitcher() {
                   <BriefcaseBusiness className="h-4 w-4 text-white" strokeWidth={ICON_STROKE} aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1 text-start leading-snug">
-                  <span className="line-clamp-3 break-words text-[13px] font-semibold text-foreground sm:text-[14px]">
+                  <span
+                    className={cn(
+                      'line-clamp-3 break-words text-[13px] font-semibold sm:text-[14px]',
+                      isOverviewHome && workspaces.length > 0
+                        ? 'text-muted-foreground'
+                        : 'text-foreground',
+                    )}
+                  >
                     {currentLabel}
                   </span>
                 </span>
@@ -80,7 +98,8 @@ export function WorkspaceSwitcher() {
             <DropdownMenuSeparator className="bg-border/60" />
             <DropdownMenuGroup>
               {workspaces.map((workspace) => {
-                const active = workspace.id === workspaceId;
+                const active =
+                  !isOverviewHome && workspace.id === workspaceId;
                 return (
                   <DropdownMenuItem
                     key={workspace.id}

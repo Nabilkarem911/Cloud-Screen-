@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
 import {
@@ -7,14 +6,17 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
-import { apiFetch } from '@/features/auth/session';
+import { io } from 'socket.io-client';
+import { apiFetch, getStoredAccessToken } from '@/features/auth/session';
 
 export type WorkspaceSummary = {
   id: string;
   name: string;
   slug: string;
+  isPaused?: boolean;
   role?: string;
 };
 
@@ -34,6 +36,9 @@ type WorkspaceContextValue = {
   businessName: string | null;
   /** Super-admin session id when JWT was minted via impersonation. */
   impersonatedBySuperAdminId: string | null;
+  /** Bumped when `pairing:started` is received on the workspace room (Add Screen flow). */
+  pairingActivityEpoch: number;
+  bumpPairingActivityEpoch: () => void;
 };
 
 const WORKSPACE_COOKIE_KEY = 'cs_workspace_id';
@@ -78,6 +83,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [workspaceId, setWorkspaceIdState] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [workspaceDataEpoch, setWorkspaceDataEpoch] = useState(0);
+  const [pairingActivityEpoch, setPairingActivityEpoch] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -87,9 +93,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [impersonatedBySuperAdminId, setImpersonatedBySuperAdminId] = useState<
     string | null
   >(null);
+  const hasSuccessfulMeRef = useRef(false);
 
   const bumpWorkspaceDataEpoch = useCallback(() => {
     setWorkspaceDataEpoch((n) => n + 1);
+  }, []);
+
+  const bumpPairingActivityEpoch = useCallback(() => {
+    setPairingActivityEpoch((n) => n + 1);
   }, []);
 
   const setWorkspaceId = useCallback((id: string) => {
@@ -97,26 +108,37 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setCookie(WORKSPACE_COOKIE_KEY, id);
   }, []);
 
+  const resetToLoggedOut = useCallback(() => {
+    hasSuccessfulMeRef.current = false;
+    setIsAuthenticated(false);
+    setIsSuperAdmin(false);
+    writeStoredSuperAdminHint(null);
+    setUserEmail(null);
+    setUserFullName(null);
+    setBusinessName(null);
+    setImpersonatedBySuperAdminId(null);
+    setWorkspaces([]);
+    setWorkspaceIdState(null);
+    clearCookie(WORKSPACE_COOKIE_KEY);
+  }, []);
+
   const refreshWorkspaces = useCallback(async (preferredWorkspaceId?: string | null) => {
     setIsLoading(true);
     try {
       const response = await apiFetch('/auth/me', { method: 'GET' });
       if (!response.ok) {
-        setIsAuthenticated(false);
-        setIsSuperAdmin(false);
-        writeStoredSuperAdminHint(null);
-        setUserEmail(null);
-        setUserFullName(null);
-        setBusinessName(null);
-        setImpersonatedBySuperAdminId(null);
-        setWorkspaces([]);
-        setWorkspaceIdState(null);
-        clearCookie(WORKSPACE_COOKIE_KEY);
+        if (response.status === 401 || response.status === 403) {
+          resetToLoggedOut();
+          return;
+        }
+        if (hasSuccessfulMeRef.current) {
+          return;
+        }
+        resetToLoggedOut();
         return;
       }
 
-      setIsAuthenticated(true);
-      const raw = (await response.json()) as {
+      let raw: {
         email?: string;
         fullName?: string | null;
         businessName?: string | null;
@@ -124,6 +146,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         isSuperAdmin?: boolean;
         impersonatedBy?: string | null;
       };
+      try {
+        raw = (await response.json()) as typeof raw;
+      } catch {
+        if (hasSuccessfulMeRef.current) {
+          return;
+        }
+        resetToLoggedOut();
+        return;
+      }
+
+      setIsAuthenticated(true);
       const superAdmin = Boolean(raw.isSuperAdmin);
       setIsSuperAdmin(superAdmin);
       writeStoredSuperAdminHint(superAdmin);
@@ -147,6 +180,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         role: membership.role,
       }));
       setWorkspaces(mapped);
+      hasSuccessfulMeRef.current = true;
 
       if (mapped.length === 0) {
         if (preferredWorkspaceId) {
@@ -183,20 +217,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setCookie(WORKSPACE_COOKIE_KEY, nextId);
       }
     } catch {
-      setIsAuthenticated(false);
-      setIsSuperAdmin(false);
-      writeStoredSuperAdminHint(null);
-      setUserEmail(null);
-      setUserFullName(null);
-      setBusinessName(null);
-      setImpersonatedBySuperAdminId(null);
-      setWorkspaces([]);
-      setWorkspaceIdState(null);
-      clearCookie(WORKSPACE_COOKIE_KEY);
+      if (hasSuccessfulMeRef.current) {
+        return;
+      }
+      resetToLoggedOut();
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [resetToLoggedOut]);
 
   useEffect(() => {
     const existing = getCookie(WORKSPACE_COOKIE_KEY);
@@ -219,6 +247,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       userFullName,
       businessName,
       impersonatedBySuperAdminId,
+      pairingActivityEpoch,
+      bumpPairingActivityEpoch,
     }),
     [
       workspaceId,
@@ -227,6 +257,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       refreshWorkspaces,
       workspaceDataEpoch,
       bumpWorkspaceDataEpoch,
+      pairingActivityEpoch,
+      bumpPairingActivityEpoch,
       isLoading,
       isAuthenticated,
       isSuperAdmin,
@@ -237,7 +269,65 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return (
+    <WorkspaceContext.Provider value={value}>
+      <WorkspaceSubscriptionRealtimeBridge />
+      {children}
+    </WorkspaceContext.Provider>
+  );
+}
+
+function getRealtimeBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_REALTIME_URL ?? 'http://localhost:4000';
+}
+
+/** Workspace Socket.IO: subscription updates + pairing activity for Add Screen UX. */
+function WorkspaceSubscriptionRealtimeBridge() {
+  const {
+    workspaceId,
+    bumpWorkspaceDataEpoch,
+    bumpPairingActivityEpoch,
+    isAuthenticated,
+  } = useWorkspace();
+
+  useEffect(() => {
+    if (!isAuthenticated || !workspaceId) return;
+
+    const token = getStoredAccessToken();
+    const socket = io(`${getRealtimeBaseUrl()}/realtime`, {
+      path: '/socket.io',
+      withCredentials: true,
+      auth: token ? { token } : undefined,
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 15000,
+      timeout: 20000,
+    });
+
+    const onConnect = () => {
+      socket.emit('dashboard:subscribe', { workspaceId });
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('workspace:subscription', () => {
+      bumpWorkspaceDataEpoch();
+    });
+    socket.on('pairing:started', () => {
+      bumpPairingActivityEpoch();
+    });
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') socket.connect();
+    });
+
+    return () => {
+      socket.removeAllListeners();
+      socket.disconnect();
+    };
+  }, [workspaceId, bumpWorkspaceDataEpoch, bumpPairingActivityEpoch, isAuthenticated]);
+
+  return null;
 }
 
 export function useWorkspace() {

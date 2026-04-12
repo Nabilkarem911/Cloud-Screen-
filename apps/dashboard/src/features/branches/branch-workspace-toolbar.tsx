@@ -1,72 +1,136 @@
 'use client';
 
-import Link from 'next/link';
-import type { Route } from 'next';
 import { useTranslations } from 'next-intl';
-import { Clapperboard, Image as ImageIcon, Monitor, PenLine } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  ChevronDown,
+  Clapperboard,
+  Image as ImageIcon,
+  Link2,
+  Monitor,
+  Plus,
+} from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ICON_STROKE } from '@/lib/icon-stroke';
 import { cn } from '@/lib/utils';
 
+export type BranchTab = 'playlists' | 'screens' | 'media';
+
 type Props = {
-  locale: string;
-  branchName: string;
+  activeTab: BranchTab;
+  onTabChange: (tab: BranchTab) => void;
+  onNewPlaylist: () => void;
   onNewScreen: () => void;
+  onNewMedia: () => void;
+  onOpenPairingModal: () => void;
+  /** Compact row for shell header (no large card wrapper). */
+  variant?: 'default' | 'inline';
 };
 
-export function BranchWorkspaceToolbar({ locale, branchName, onNewScreen }: Props) {
-  const t = useTranslations('branchToolbar');
-  const base = `/${locale}`;
+const tabButtonClass = (active: boolean, inline: boolean) =>
+  cn(
+    'inline-flex items-center gap-2 rounded-xl border font-semibold transition',
+    inline
+      ? 'px-2.5 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm'
+      : 'px-3.5 py-2.5 text-sm',
+    active
+      ? 'border-[#FF6B00]/55 bg-[#FF6B00]/18 text-white'
+      : 'border-[#FF6B00]/25 bg-white/60 text-[#1B254B] hover:border-[#FF6B00]/50 hover:bg-[#FF6B00]/10 dark:border-white/15 dark:bg-[#1B254B]/50 dark:text-white dark:hover:bg-[#FF6B00]/15',
+  );
 
-  const links = [
-    { href: `${base}/playlists` as Route, label: t('playlists'), icon: Clapperboard },
-    { href: `${base}/screens` as Route, label: t('screens'), icon: Monitor },
-    { href: `${base}/media` as Route, label: t('media'), icon: ImageIcon },
+export function BranchWorkspaceToolbar({
+  activeTab,
+  onTabChange,
+  onNewPlaylist,
+  onNewScreen,
+  onNewMedia,
+  onOpenPairingModal,
+  variant = 'default',
+}: Props) {
+  const t = useTranslations('branchToolbar');
+  const inline = variant === 'inline';
+
+  const tabs = [
+    { key: 'playlists' as const, label: t('playlists'), icon: Clapperboard },
+    { key: 'screens' as const, label: t('screens'), icon: Monitor },
+    { key: 'media' as const, label: t('media'), icon: ImageIcon },
   ] as const;
 
-  return (
+  const iconClass = cn('shrink-0 text-[#FF6B00]', inline ? 'h-3.5 w-3.5 sm:h-4 sm:w-4' : 'h-4 w-4');
+
+  const inner = (
     <div
       className={cn(
-        'flex flex-col gap-5 rounded-3xl border border-[#FF6B00]/12 bg-gradient-to-br from-[#0F1729]/40 via-transparent to-[#FF6B00]/[0.06] p-5 sm:p-6',
-        'dark:border-white/10 dark:from-[#0B1220]/80',
+        'flex flex-wrap items-center gap-1.5 sm:gap-2',
+        inline ? 'justify-end' : 'justify-center gap-2',
       )}
+      aria-label={t('navAria')}
     >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            {t('branchLabel')}
-          </p>
-          <h1 className="mt-1.5 text-balance text-2xl font-bold leading-tight tracking-tight text-foreground dark:text-white sm:text-3xl">
-            <span className="line-clamp-3 break-words">{branchName}</span>
-          </h1>
-        </div>
-        <nav
-          className="flex flex-wrap items-center gap-2 lg:max-w-[min(100%,520px)] lg:justify-end"
-          aria-label={t('navAria')}
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={() => onTabChange(tab.key)}
+          className={tabButtonClass(activeTab === tab.key, inline)}
         >
-          {links.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-xl border border-[#FF6B00]/25 bg-white/60 px-3.5 py-2.5 text-sm font-semibold',
-                'text-[#1B254B] shadow-sm transition hover:border-[#FF6B00]/50 hover:bg-[#FF6B00]/10',
-                'dark:border-white/15 dark:bg-[#1B254B]/50 dark:text-white dark:hover:bg-[#FF6B00]/15',
-              )}
-            >
-              <item.icon className="h-4 w-4 shrink-0 text-[#FF6B00]" strokeWidth={ICON_STROKE} />
-              {item.label}
-            </Link>
-          ))}
-          <Button
+          <tab.icon className={iconClass} strokeWidth={ICON_STROKE} />
+          {tab.label}
+        </button>
+      ))}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
             type="button"
-            onClick={onNewScreen}
-            className="rounded-xl bg-[#FF6B00] px-4 py-2.5 font-semibold text-amber-950 shadow-md shadow-[#FF6B00]/20 hover:bg-[#FF6B00]/90"
+            className={tabButtonClass(false, inline)}
+            aria-label={t('actionsMenuAria')}
           >
-            <PenLine className="me-2 inline h-4 w-4" strokeWidth={ICON_STROKE} />
+            <Plus className={iconClass} strokeWidth={ICON_STROKE} />
+            {t('actionsMenu')}
+            <ChevronDown className={cn(iconClass, 'opacity-80')} strokeWidth={ICON_STROKE} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align={inline ? 'end' : 'center'} className="min-w-[14rem]">
+          <DropdownMenuItem className="gap-2 font-semibold" onClick={() => onNewPlaylist()}>
+            <Clapperboard className="h-4 w-4 text-[#FF6B00]" strokeWidth={ICON_STROKE} />
+            {t('newPlaylist')}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2 font-semibold" onClick={() => onNewScreen()}>
+            <Monitor className="h-4 w-4 text-[#FF6B00]" strokeWidth={ICON_STROKE} />
             {t('newScreen')}
-          </Button>
-        </nav>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2 font-semibold" onClick={() => onNewMedia()}>
+            <ImageIcon className="h-4 w-4 text-[#FF6B00]" strokeWidth={ICON_STROKE} />
+            {t('newMedia')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2 font-semibold" onClick={() => onOpenPairingModal()}>
+            <Link2 className="h-4 w-4 text-[#FF6B00]" strokeWidth={ICON_STROKE} />
+            {t('linkDisplay')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
+  if (inline) {
+    return inner;
+  }
+
+  return (
+    <div className="flex w-full justify-center px-0">
+      <div
+        className={cn(
+          'inline-flex w-full max-w-max flex-col gap-3 rounded-3xl border border-[#FF6B00]/12 bg-gradient-to-br from-[#0F1729]/40 via-transparent to-[#FF6B00]/[0.06] p-4 sm:flex-row sm:items-center sm:gap-2',
+          'dark:border-white/10 dark:from-[#0B1220]/80',
+        )}
+      >
+        {inner}
       </div>
     </div>
   );

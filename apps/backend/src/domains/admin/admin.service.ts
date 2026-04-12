@@ -7,6 +7,8 @@ import {
 import * as os from 'os';
 import {
   PlatformStaffRole,
+  ScreenPairingSessionStatus,
+  ScreenStatus,
   UserRole,
   UserSubscriptionStatus,
 } from '@prisma/client';
@@ -14,7 +16,9 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { ScreenHeartbeatService } from '../realtime/screen-heartbeat.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { SubscriptionEmailService } from '../email/subscription-email.service';
+import { assertMockBillingAllowed } from '../../common/product/mock-billing';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import {
   appendAuditLog,
@@ -85,6 +89,7 @@ export class AdminService {
     private readonly workspaces: WorkspacesService,
     private readonly heartbeat: ScreenHeartbeatService,
     private readonly subscriptionEmail: SubscriptionEmailService,
+    private readonly workspaceSubscriptions: SubscriptionsService,
   ) {}
 
   async listUsers() {
@@ -122,10 +127,7 @@ export class AdminService {
     const storageByUser = new Map<string, number>();
     for (const row of membersRows) {
       const add = wsSize.get(row.workspaceId) ?? 0;
-      storageByUser.set(
-        row.userId,
-        (storageByUser.get(row.userId) ?? 0) + add,
-      );
+      storageByUser.set(row.userId, (storageByUser.get(row.userId) ?? 0) + add);
     }
     const now = new Date();
     return users.map((u) => {
@@ -219,20 +221,31 @@ export class AdminService {
       adminControl = { id: ws.id };
     }
     await this.prisma.workspaceMember.upsert({
-      where: { workspaceId_userId: { workspaceId: adminControl.id, userId: user.id } },
+      where: {
+        workspaceId_userId: { workspaceId: adminControl.id, userId: user.id },
+      },
       create: {
         workspaceId: adminControl.id,
         userId: user.id,
-        role: input.adminRole === 'SUPER_ADMIN' ? UserRole.OWNER : (input.adminRole as UserRole),
+        role:
+          input.adminRole === 'SUPER_ADMIN'
+            ? UserRole.OWNER
+            : (input.adminRole as UserRole),
       },
       update: {
-        role: input.adminRole === 'SUPER_ADMIN' ? UserRole.OWNER : (input.adminRole as UserRole),
+        role:
+          input.adminRole === 'SUPER_ADMIN'
+            ? UserRole.OWNER
+            : (input.adminRole as UserRole),
       },
     });
     return user;
   }
 
-  async updateStaffRole(userId: string, role: 'SUPER_ADMIN' | 'ADMIN' | 'EDITOR' | 'VIEWER') {
+  async updateStaffRole(
+    userId: string,
+    role: 'SUPER_ADMIN' | 'ADMIN' | 'EDITOR' | 'VIEWER',
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('Staff user not found');
     let adminControl = await this.prisma.workspace.findFirst({
@@ -287,8 +300,7 @@ export class AdminService {
         (u) =>
           u.email.toLowerCase().includes(term) ||
           u.fullName.toLowerCase().includes(term) ||
-          (u.businessName &&
-            u.businessName.toLowerCase().includes(term)),
+          (u.businessName && u.businessName.toLowerCase().includes(term)),
       );
     }
     return rows;
@@ -509,7 +521,10 @@ export class AdminService {
       throw new NotFoundException('Customer not found');
     }
     await this.subscriptionEmail.sendRenewalReminder(user.email, user.fullName);
-    return { ok: true, message: 'Reminder queued (placeholder email service).' };
+    return {
+      ok: true,
+      message: 'Reminder sent.',
+    };
   }
 
   async listWorkspaces() {
@@ -539,6 +554,9 @@ export class AdminService {
           _count: {
             select: { screens: true, medias: true },
           },
+          subscription: {
+            select: { plan: true, screenLimit: true, status: true },
+          },
         },
       }),
       this.prisma.media.groupBy({
@@ -555,9 +573,7 @@ export class AdminService {
       const owner = primary?.user;
       const ownerId = primary?.userId ?? null;
       const isBillableCustomer =
-        owner &&
-        !owner.isSuperAdmin &&
-        owner.platformStaffRole == null;
+        owner && !owner.isSuperAdmin && owner.platformStaffRole == null;
       return {
         id: w.id,
         name: w.name,
@@ -570,13 +586,70 @@ export class AdminService {
         screenCount: w._count.screens,
         mediaCount: w._count.medias,
         storageBytes: storageByWs.get(w.id) ?? 0,
+        subscriptionPlan: w.subscription?.plan ?? null,
+        subscriptionScreenLimit: w.subscription?.screenLimit ?? null,
+        subscriptionStatus: w.subscription?.status ?? null,
       };
     });
   }
 
+  async listGlobalFleetScreens() {
+    const rows = await this.prisma.screen.findMany({
+      orderBy: [{ workspaceId: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        serialNumber: true,
+        status: true,
+        lastSeenAt: true,
+        playerPlatform: true,
+        isOfflineCacheMode: true,
+        workspace: { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      serialNumber: s.serialNumber,
+      status: s.status,
+      lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+      playerPlatform: s.playerPlatform,
+      workspaceId: s.workspace.id,
+      workspaceName: s.workspace.name,
+      isOfflineCacheMode: s.isOfflineCacheMode,
+    }));
+  }
+
+  async mockWorkspaceSubscriptionPlan(
+    workspaceId: string,
+    plan: 'FREE' | 'PRO',
+  ) {
+    assertMockBillingAllowed();
+    const w = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true },
+    });
+    if (!w) throw new NotFoundException('Workspace not found');
+    return this.workspaceSubscriptions.setMockPlan(workspaceId, plan);
+  }
+
   async getGlobalStats() {
-    const [onlineScreens, totalActiveUsers, totalWorkspaces, totalActiveCustomers, paymentAgg] = await Promise.all([
-      this.prisma.screen.count({ where: { status: 'ONLINE' } }),
+    const now = new Date();
+    const [
+      onlineScreens,
+      totalScreens,
+      totalActiveUsers,
+      totalWorkspaces,
+      totalActiveCustomers,
+      paymentAgg,
+      mediaSizeAgg,
+      storageQuotaAgg,
+      pairingPending,
+      screenStatusGroups,
+      cacheModeScreens,
+    ] = await Promise.all([
+      this.prisma.screen.count({ where: { status: ScreenStatus.ONLINE } }),
+      this.prisma.screen.count(),
       this.prisma.user.count({ where: { isActive: true } }),
       this.prisma.workspace.count(),
       this.prisma.user.count({
@@ -588,21 +661,66 @@ export class AdminService {
       }),
       this.prisma.paymentRecord.aggregate({
         where: {
-          OR: [{ paidAt: { not: null } }, { status: { in: ['PAID', 'SUCCEEDED', 'SUCCESS'] } }],
+          OR: [
+            { paidAt: { not: null } },
+            { status: { in: ['PAID', 'SUCCEEDED', 'SUCCESS'] } },
+          ],
         },
         _sum: { amountCents: true },
       }),
+      this.prisma.media.aggregate({ _sum: { sizeBytes: true } }),
+      this.prisma.subscription.aggregate({
+        where: { storageLimitBytes: { not: null } },
+        _sum: { storageLimitBytes: true },
+      }),
+      this.prisma.screenPairingSession.count({
+        where: {
+          status: ScreenPairingSessionStatus.PENDING,
+          expiresAt: { gte: now },
+        },
+      }),
+      this.prisma.screen.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+      }),
+      this.prisma.screen.count({ where: { isOfflineCacheMode: true } }),
     ]);
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const load = os.loadavg();
+    const healthOnline =
+      screenStatusGroups.find((g) => g.status === ScreenStatus.ONLINE)?._count
+        ._all ?? 0;
+    const healthOffline =
+      screenStatusGroups.find((g) => g.status === ScreenStatus.OFFLINE)?._count
+        ._all ?? 0;
+    const healthMaintenance =
+      screenStatusGroups.find((g) => g.status === ScreenStatus.MAINTENANCE)
+        ?._count._all ?? 0;
+    const storageUsedBytes = mediaSizeAgg._sum.sizeBytes ?? 0;
+    const quotaSum = storageQuotaAgg._sum.storageLimitBytes;
+    const storageQuotaBytes =
+      quotaSum != null && quotaSum > 0 ? quotaSum : null;
     return {
-      revenueUsdPlaceholder: Math.round((paymentAgg._sum.amountCents ?? 0) / 100),
+      revenueUsdPlaceholder: Math.round(
+        (paymentAgg._sum.amountCents ?? 0) / 100,
+      ),
       totalConnectedScreens: onlineScreens,
       totalActiveUsers,
       totalActiveCustomers,
       totalWorkspaces,
       realtimeSocketConnections: this.heartbeat.getConnectedSocketCount(),
+      adminOverview: {
+        screensOnline: onlineScreens,
+        screensTotal: totalScreens,
+        storageUsedBytes,
+        storageQuotaBytes,
+        pairingPendingActive: pairingPending,
+        healthOnline,
+        healthOffline,
+        healthMaintenance,
+        healthCacheMode: cacheModeScreens,
+      },
       server: {
         loadAvg1m: load[0] ?? 0,
         memoryUsedBytes: totalMem - freeMem,
@@ -617,7 +735,9 @@ export class AdminService {
     if (userId === actorId && dto.isActive === false) {
       throw new BadRequestException('You cannot suspend your own account.');
     }
-    const existing = await this.prisma.user.findUnique({ where: { id: userId } });
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
     if (!existing) throw new NotFoundException('User not found');
 
     const data: {
@@ -632,7 +752,9 @@ export class AdminService {
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.isSuperAdmin !== undefined) {
       if (userId === actorId && dto.isSuperAdmin === false) {
-        throw new ForbiddenException('You cannot remove your own super admin flag.');
+        throw new ForbiddenException(
+          'You cannot remove your own super admin flag.',
+        );
       }
       data.isSuperAdmin = dto.isSuperAdmin;
     }
@@ -784,10 +906,7 @@ export class AdminService {
       if (!pick) {
         throw new BadRequestException('Workspace not available for this user.');
       }
-      workspaces = [
-        pick,
-        ...workspaces.filter((w) => w.id !== workspaceId),
-      ];
+      workspaces = [pick, ...workspaces.filter((w) => w.id !== workspaceId)];
     }
 
     const [actor, target] = await Promise.all([

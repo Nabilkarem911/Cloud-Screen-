@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
+import { devLog } from '@/lib/dev-log';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -32,7 +33,9 @@ function PlayerHeartbeatInner({ serialNumber, secret }: InnerProps) {
 
     const register = () => {
       socket.emit('screen:register', { serialNumber, secret });
-      socket.emit('screen:heartbeat');
+      socket.emit('screen:heartbeat', {
+        isOfflineMode: typeof navigator !== 'undefined' && !navigator.onLine,
+      });
     };
 
     socket.on('connect', () => {
@@ -44,8 +47,8 @@ function PlayerHeartbeatInner({ serialNumber, secret }: InnerProps) {
       setDetail(`Heartbeat active for ${serialNumber}`);
     });
 
-    socket.on('playlist:updated', (payload: unknown) => {
-      console.log('[playlist:updated]', payload);
+    socket.on('content:sync', (payload: unknown) => {
+      devLog('[content:sync]', payload);
     });
 
     socket.on('screen:error', (payload: { code?: string }) => {
@@ -68,7 +71,9 @@ function PlayerHeartbeatInner({ serialNumber, secret }: InnerProps) {
 
     intervalRef.current = setInterval(() => {
       if (socket.connected) {
-        socket.emit('screen:heartbeat');
+        socket.emit('screen:heartbeat', {
+          isOfflineMode: typeof navigator !== 'undefined' && !navigator.onLine,
+        });
       }
     }, HEARTBEAT_INTERVAL_MS);
 
