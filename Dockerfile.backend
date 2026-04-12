@@ -7,7 +7,7 @@
 FROM node:20 AS builder
 WORKDIR /app
 
-RUN npm install -g prisma
+RUN npm install -g prisma@latest
 
 COPY package*.json ./
 COPY apps/backend/package*.json ./apps/backend/
@@ -21,14 +21,18 @@ RUN npm install
 
 COPY apps/backend ./apps/backend
 
-# Re-run install so workspace links / hoisted bins exist after backend sources are present
 RUN npm install
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-RUN ./node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma
+# Debug hoisting (Railway build logs): workspace bin layout before prisma generate
+RUN ls -R node_modules/.bin
+RUN ls -R apps/backend/node_modules/.bin || true
 
-RUN npm run build --workspace=backend
+RUN echo "=== Prisma generate + Nest build starting ===" \
+  && (./node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma \
+      || ./apps/backend/node_modules/.bin/prisma generate --schema=apps/backend/prisma/schema.prisma) \
+  && npm run build --workspace=backend
 
 FROM node:20-alpine
 WORKDIR /app
@@ -40,7 +44,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app ./
 
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
-RUN npm install -g prisma \
+RUN npm install -g prisma@latest \
   && npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
 EXPOSE 4000
@@ -48,5 +52,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
   CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# Global `prisma` from prior RUN — avoids npx/sh resolving a missing local binary after prune-less copy
 CMD ["sh", "-c", "prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
