@@ -20,3 +20,7 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local secrets / editor
+.env.*.local
+apps/marketing/.env.local

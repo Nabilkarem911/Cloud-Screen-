@@ -38,3 +38,9 @@ API base URL defaults to `http://localhost:4000/api/v1`; dashboard reads `NEXT_P
 - **Email:** Resend, SendGrid, or SMTP — see `.env.example`
 - **Stripe:** Checkout, webhooks, Customer Portal — price IDs and `STRIPE_WEBHOOK_SECRET` in `.env.example`
 - **Sentry:** `SENTRY_DSN` (backend), `NEXT_PUBLIC_SENTRY_DSN` or `SENTRY_DSN` (dashboard) when wired in config
+
+## GitHub: sync & CI
+
+- **Day to day:** `git pull --rebase origin main` before you start, then after changes: `git status` → `git add` / `git commit` → `git push origin main`.
+- **Do not commit** real `.env` files, `apps/backend/.data/`, or `.next` / `dist` output (see `.gitignore`).
+- **CI** (`.github/workflows/ci.yml`) runs on push/PR to `main`, `master`, or `develop`: install, `prisma generate` + `prisma validate` (uses a dummy `DATABASE_URL` — no database container needed), backend build/tests, dashboard/player/marketing builds, and i18n checks.
