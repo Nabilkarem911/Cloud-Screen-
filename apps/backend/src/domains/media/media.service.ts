@@ -164,7 +164,10 @@ export class MediaService {
     const dir = this.ensureUploadDir(params.targetWorkspaceId);
     const ext = this.safeExt(media.originalName, media.mimeType);
     const fileName = `${randomUUID()}${ext}`;
-    const relativePath = join(params.targetWorkspaceId, fileName).replace(/\\/g, '/');
+    const relativePath = join(params.targetWorkspaceId, fileName).replace(
+      /\\/g,
+      '/',
+    );
     const destAbs = join(dir, fileName);
 
     await copyFile(srcAbs, destAbs);

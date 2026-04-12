@@ -14,7 +14,9 @@ export class SubscriptionEmailService {
 
   async sendRenewalReminder(toEmail: string, fullName: string): Promise<void> {
     const origin = this.config.get<string>('FRONTEND_ORIGIN')?.trim();
-    const dashboardUrl = origin ? `${origin.replace(/\/$/, '')}/en/overview` : undefined;
+    const dashboardUrl = origin
+      ? `${origin.replace(/\/$/, '')}/en/overview`
+      : undefined;
     const { subject, html, text } = subscriptionReminderEmail({
       fullName,
       dashboardUrl,

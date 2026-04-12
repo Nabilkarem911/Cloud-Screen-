@@ -19,7 +19,7 @@ export class StripeWebhookController {
     @Req() req: Request,
     @Headers('stripe-signature') signature: string | undefined,
   ) {
-    const raw = req.body;
+    const raw: unknown = req.body;
     if (!Buffer.isBuffer(raw)) {
       throw new BadRequestException('Expected raw webhook body');
     }

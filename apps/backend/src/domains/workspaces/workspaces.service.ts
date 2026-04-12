@@ -266,7 +266,11 @@ export class WorkspacesService {
     };
   }
 
-  async updateWorkspace(userId: string, workspaceId: string, dto: UpdateWorkspaceDto) {
+  async updateWorkspace(
+    userId: string,
+    workspaceId: string,
+    dto: UpdateWorkspaceDto,
+  ) {
     await this.assertWorkspaceAccess(workspaceId, userId, true);
     if (dto.name === undefined && dto.isPaused === undefined) {
       throw new BadRequestException('No fields to update.');
@@ -376,5 +380,4 @@ export class WorkspacesService {
     });
     return { ok: true as const };
   }
-
 }

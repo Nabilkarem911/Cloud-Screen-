@@ -28,9 +28,11 @@ describe('StripeWebhookService', () => {
       processedWebhookEvent: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      $transaction: jest.fn(async (fn: (tx: typeof prismaTx) => Promise<void>) => {
-        await fn(prismaTx);
-      }),
+      $transaction: jest.fn(
+        async (fn: (tx: typeof prismaTx) => Promise<void>) => {
+          await fn(prismaTx);
+        },
+      ),
     };
     const moduleRef = await Test.createTestingModule({
       providers: [

@@ -47,7 +47,10 @@ export class PairingService {
       select: { role: true },
     });
     if (!membership) throw new NotFoundException('Workspace not found');
-    if (membership.role !== UserRole.OWNER && membership.role !== UserRole.ADMIN) {
+    if (
+      membership.role !== UserRole.OWNER &&
+      membership.role !== UserRole.ADMIN
+    ) {
       throw new ForbiddenException(
         'Only owners and admins can claim a pairing code',
       );
@@ -250,8 +253,7 @@ export class PairingService {
 
       const serialNumber = await this.makeUniqueSerialTx(tx);
       const screenName =
-        dto.name?.trim() ||
-        `Screen ${serialNumber.slice(-6).toUpperCase()}`;
+        dto.name?.trim() || `Screen ${serialNumber.slice(-6).toUpperCase()}`;
 
       const screen = await tx.screen.create({
         data: {

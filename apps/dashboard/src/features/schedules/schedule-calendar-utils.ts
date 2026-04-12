@@ -58,8 +58,8 @@ export function shiftSameDayWindow(
   const sm = parseHHmm(startTime);
   const em = parseHHmm(endTime);
   if (sm >= em) return null;
-  let ns = sm + deltaMin;
-  let ne = em + deltaMin;
+  const ns = sm + deltaMin;
+  const ne = em + deltaMin;
   if (ns < 0 || ne > DAY_MIN || ns >= ne) return null;
   return { startTime: formatHHmm(ns), endTime: formatHHmm(ne) };
 }

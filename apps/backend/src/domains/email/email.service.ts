@@ -55,7 +55,10 @@ export class EmailService {
     throw new Error('No email provider configured');
   }
 
-  private async sendViaResend(apiKey: string, input: SendMailInput): Promise<void> {
+  private async sendViaResend(
+    apiKey: string,
+    input: SendMailInput,
+  ): Promise<void> {
     const from = this.fromHeader();
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

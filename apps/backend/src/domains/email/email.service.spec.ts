@@ -26,7 +26,8 @@ describe('EmailService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (k: string) => (k === 'RESEND_API_KEY' ? 're_test' : undefined),
+            get: (k: string) =>
+              k === 'RESEND_API_KEY' ? 're_test' : undefined,
           },
         },
       ],

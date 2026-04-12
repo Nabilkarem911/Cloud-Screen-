@@ -39,7 +39,9 @@ export class StripeWebhookService {
     const secret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     if (!secret?.trim()) {
       this.logger.warn('STRIPE_WEBHOOK_SECRET is not set; refusing webhook');
-      throw new ServiceUnavailableException('Stripe webhooks are not configured');
+      throw new ServiceUnavailableException(
+        'Stripe webhooks are not configured',
+      );
     }
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header');
@@ -60,12 +62,14 @@ export class StripeWebhookService {
         });
 
         if (event.type === 'checkout.session.completed') {
-          const session = event.data.object as Stripe.Checkout.Session;
+          const session = event.data.object;
           const md = session.metadata ?? {};
           const workspaceId = (md.workspace_id ?? md.workspaceId)?.trim();
           const plan = this.parsePlan(md.plan ?? md.subscription_plan);
           if (workspaceId && plan) {
-            const screenLimit = this.parseIntMd(md.screen_limit ?? md.screenLimit);
+            const screenLimit = this.parseIntMd(
+              md.screen_limit ?? md.screenLimit,
+            );
             const seats = this.parseIntMd(md.seats);
             const storageLimitBytes = this.parseIntMd(
               md.storage_limit_bytes ?? md.storageLimitBytes,
@@ -85,7 +89,8 @@ export class StripeWebhookService {
             const subscriptionId =
               typeof session.subscription === 'string'
                 ? session.subscription
-                : session.subscription && typeof session.subscription === 'object'
+                : session.subscription &&
+                    typeof session.subscription === 'object'
                   ? (session.subscription as { id?: string }).id
                   : undefined;
 
@@ -108,7 +113,7 @@ export class StripeWebhookService {
           event.type === 'customer.subscription.updated' ||
           event.type === 'customer.subscription.deleted'
         ) {
-          const stripeSub = event.data.object as Stripe.Subscription;
+          const stripeSub = event.data.object;
           await this.subscriptions.syncFromStripeSubscription(
             tx,
             stripeSub,

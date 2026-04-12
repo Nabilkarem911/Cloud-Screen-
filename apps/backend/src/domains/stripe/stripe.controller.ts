@@ -23,10 +23,7 @@ export class StripeController {
   @Post('checkout')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  createCheckout(
-    @CurrentUser() user: JwtUser,
-    @Body() dto: CreateCheckoutDto,
-  ) {
+  createCheckout(@CurrentUser() user: JwtUser, @Body() dto: CreateCheckoutDto) {
     return this.subscriptions.createStripeCheckoutSession(
       user.sub,
       dto.workspaceId,
@@ -38,10 +35,7 @@ export class StripeController {
   @Post('portal')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  createPortal(
-    @CurrentUser() user: JwtUser,
-    @Body() dto: CreatePortalDto,
-  ) {
+  createPortal(@CurrentUser() user: JwtUser, @Body() dto: CreatePortalDto) {
     return this.subscriptions.createBillingPortalSession(
       user.sub,
       dto.workspaceId,

@@ -305,18 +305,13 @@ export class SubscriptionsService {
       status = SubscriptionStatus.CANCELED;
     } else if (stripeSub.status === 'trialing') {
       status = SubscriptionStatus.TRIALING;
-    } else if (
-      stripeSub.status === 'active' ||
-      stripeSub.status === 'paused'
-    ) {
+    } else if (stripeSub.status === 'active' || stripeSub.status === 'paused') {
       status = SubscriptionStatus.ACTIVE;
     }
 
     const periodEndSec = stripeSub.current_period_end;
     const currentPeriodEnd =
-      typeof periodEndSec === 'number'
-        ? new Date(periodEndSec * 1000)
-        : null;
+      typeof periodEndSec === 'number' ? new Date(periodEndSec * 1000) : null;
 
     const customerRef = stripeSub.customer;
     const stripeCustomerId =

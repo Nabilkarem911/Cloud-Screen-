@@ -7,7 +7,7 @@
     "dev:turbo": "next dev -p 3001 --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

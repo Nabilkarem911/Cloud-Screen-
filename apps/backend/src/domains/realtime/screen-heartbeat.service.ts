@@ -173,7 +173,9 @@ export class ScreenHeartbeatService implements OnModuleInit, OnModuleDestroy {
     workspaceId: string,
     payload: Record<string, unknown>,
   ): void {
-    this.io?.to(`workspace:${workspaceId}`).emit('workspace:subscription', payload);
+    this.io
+      ?.to(`workspace:${workspaceId}`)
+      .emit('workspace:subscription', payload);
   }
 
   emitScheduleChanged(

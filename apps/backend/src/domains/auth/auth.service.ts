@@ -17,10 +17,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { appendAuditLog } from '../admin/admin-runtime.store';
 import { EmailService } from '../email/email.service';
-import {
-  passwordResetEmail,
-  registerOtpEmail,
-} from '../email/email-templates';
+import { passwordResetEmail, registerOtpEmail } from '../email/email-templates';
 import { LoginDto } from './dto/login.dto';
 import { RegisterStartDto } from './dto/register-start.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
@@ -66,10 +63,7 @@ export class AuthService {
     if (existing) {
       throw new ConflictException('Email already registered');
     }
-    if (
-      process.env.NODE_ENV === 'production' &&
-      !this.email.isConfigured()
-    ) {
+    if (process.env.NODE_ENV === 'production' && !this.email.isConfigured()) {
       throw new ServiceUnavailableException('Email is not configured');
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
@@ -117,7 +111,10 @@ export class AuthService {
     const email = emailRaw.toLowerCase();
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || user.emailVerified) {
-      return { ok: true, message: 'If an account needs verification, a new code was sent.' };
+      return {
+        ok: true,
+        message: 'If an account needs verification, a new code was sent.',
+      };
     }
     const code = String(randomInt(100000, 999999));
     const otpHash = await bcrypt.hash(code, 10);
