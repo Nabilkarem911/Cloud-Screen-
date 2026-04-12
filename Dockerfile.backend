@@ -9,6 +9,9 @@ WORKDIR /app
 
 RUN apk add --no-cache openssl libc6-compat
 
+# Prisma CLI on PATH for build (covers Railway NODE_ENV=production where `npm ci` omits devDependencies).
+RUN npm install -g prisma@6.19.3
+
 # Root lockfile + shared packages
 COPY package.json package-lock.json ./
 COPY packages ./packages/
@@ -19,6 +22,8 @@ COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/player/package.json apps/player/
 COPY apps/marketing/package.json apps/marketing/
 
+# Install including devDependencies (Prisma CLI is a devDependency of the backend workspace).
+ENV NODE_ENV=development
 RUN npm ci
 
 # Backend source and Prisma schema
@@ -27,7 +32,7 @@ COPY apps/backend ./apps/backend
 # Prisma Client (fixes missing generated types in Nest build)
 ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma \
+RUN npx --yes prisma@6.19.3 generate --schema=apps/backend/prisma/schema.prisma \
   && npm run build --workspace=backend \
   && npm prune --omit=dev
 
@@ -47,4 +52,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
   CMD node -e "const p=Number(process.env.PORT||4000);require('http').get('http://127.0.0.1:'+p+'/api/v1',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 # migrate deploy needs DATABASE_URL at runtime; Prisma Client comes from builder `prisma generate` above.
-CMD ["sh", "-c", "npx --yes prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
+CMD ["sh", "-c", "npx --yes prisma@6.19.3 migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
