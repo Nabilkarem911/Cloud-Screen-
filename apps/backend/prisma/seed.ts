@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { PrismaPg } from '@prisma/adapter-pg';
 import {
   PrismaClient,
   PlatformStaffRole,
@@ -12,7 +13,14 @@ import {
   SubscriptionStatus,
 } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required for prisma db seed');
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: databaseUrl }),
+});
 
 const CLIENT_WORKSPACE_NAME = 'My First Client Branch';
 const SCREEN_A = 'CS-CLIENT-LOBBY-001';
