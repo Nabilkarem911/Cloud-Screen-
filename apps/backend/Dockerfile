@@ -1,21 +1,23 @@
-# Dockerfile for Railway Deployment
+# Dockerfile
 
-FROM node:14
-
-# Set working directory
-WORKDIR /usr/src/app
-
-# Copy package.json and package-lock.json
+# Stage 1: Build the application
+FROM node:14 AS builder
+WORKDIR /app
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install --production
-
-# Copy source files
+RUN npm install
 COPY . .
+RUN npm run build
 
-# Expose the port the app runs on
-EXPOSE 8080
+# Stage 2: Run the application
+FROM node:14
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+RUN npm install --only=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
 
 # Start the application
-CMD [ "npm", "start" ]
+CMD [ "node", "dist/index.js" ]
