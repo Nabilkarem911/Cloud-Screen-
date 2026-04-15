@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # توليد ملفات Prisma Client (بدون أوامر Config معقدة)
-RUN npx prisma generate
+RUN npx prisma generate --config apps/backend/prisma.config.ts
 
 # بناء المشروع
 RUN npm run build
