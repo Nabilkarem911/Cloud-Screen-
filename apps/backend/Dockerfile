@@ -1,41 +1,44 @@
-# 1. المرحلة الأولى: البناء (Build)
-FROM node:20-alpine AS builder
-
+# syntax=docker/dockerfile:1
+FROM node:20 AS builder
 WORKDIR /app
 
-# نسخ ملفات التعريف أولاً لسرعة الـ Cache
+# نسخ ملفات تعريف الـ Workspaces
 COPY package*.json ./
-COPY prisma ./prisma/
+COPY packages ./packages
+COPY apps/backend/package*.json ./apps/backend/
 
-# تثبيت جميع المكتبات بما فيها الـ devDependencies للبناء
+# تثبيت الاعتمادات
 RUN npm install
 
-# نسخ باقي ملفات المشروع
-COPY . .
+# نسخ كود الباكاند
+COPY apps/backend ./apps/backend
 
-# توليد ملفات Prisma Client (بدون أوامر Config معقدة)
-RUN npx prisma generate --config apps/backend/prisma.config.ts
+# متغير بيئة وهمي لعملية البناء فقط
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
-# بناء المشروع
-RUN npm run build
+# توليد Prisma Client (تصحيح: استخدام npx و --schema)
+RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
-# 2. المرحلة الثانية: التشغيل (Production)
+# بناء مشروع الباكاند
+RUN npm run build --workspace=backend
+
 FROM node:20-alpine
-
 WORKDIR /app
 
-# نسخ الملفات الضرورية فقط من مرحلة البناء لتقليل مساحة الصورة
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/prisma ./prisma
+# تثبيت مكتبات النظام الضرورية
+RUN apk add --no-cache openssl libc6-compat
 
-# التأكد من وجود المتغيرات من ريلواي
 ENV NODE_ENV=production
 
-# فتح المنفذ (المنفذ الافتراضي لريلواي)
+# نسخ الملفات من مرحلة البناء
+COPY --from=builder /app ./
+
+# فتح المنفذ (Railway PORT)
 EXPOSE 3000
 
-# أمر التشغيل: بيعمل Push للسكيما الأول وبعدين يشغل السيرفر
-# ده بيضمن إن الـ Healthcheck ينجح لأن الداتابيز هتكون جاهزة
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]
+# اختبار الصحة (Healthcheck)
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
+  CMD node -e "const p=Number(process.env.PORT||3000);require('http').get('http://127.0.0.1:'+p+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
+# أمر التشغيل النهائي (تصحيح: migrate deploy مع npx والمسار الصحيح)
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=backend"]
